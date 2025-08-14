@@ -196,57 +196,61 @@ User query: """ + query
             return ToolResult("search_kvk", False, None, str(e))
 
     async def _execute_search_fpo(self, village: Optional[str], state: str) -> ToolResult:
-        """Execute FPO search tool with enhanced geocoding."""
+        """Execute FPO search tool with finalized enhanced logic."""
         try:
             svc = FPOService()
             
             if village:
-                # Try enhanced geocoding with dual maps API first, fallback to weather APIs
-                result = await geocode_dual_api(f"{village}, {state}")
-                if result:
-                    geo = {'lat': result.lat, 'lon': result.lon}
-                else:
-                    # Fallback to weather API geocoding
-                    geo = await ws.geocode_openweather(village, state) or await ws.geocode_visual_crossing(village, state)
+                # Use the finalized nearest FPO logic with geocoding
+                nearest_fpos = await svc.find_nearest_fpos_with_geocoding(village, state, limit=5)
                 
-                if geo:
-                    # Find nearest FPOs in the same state using enhanced distance calculation
-                    state_fpos = [f for f in svc.fpos if f.state.lower() == state.lower() and not (f.lat == 0.0 and f.lon == 0.0)]
-                    def dist(f):
-                        return svc.calculate_distance(geo['lat'], geo['lon'], f.lat, f.lon)
-                    nearest = sorted(((f, dist(f)) for f in state_fpos), key=lambda x: x[1])[:5]
+                if nearest_fpos:
+                    fpos = []
+                    for fpo, distance in nearest_fpos:
+                        fpos.append({
+                            "name": fpo.name,
+                            "district": fpo.district,
+                            "state": fpo.state,
+                            "distance_km": f"{distance:.1f}",
+                            "coordinates": f"({fpo.lat:.4f}, {fpo.lon:.4f})" if (fpo.lat != 0.0 or fpo.lon != 0.0) else "N/A",
+                            "geocoding_source": "dual_maps_api"
+                        })
                     
-                    if nearest:
-                        fpos = []
-                        for f, distance in nearest:
-                            fpos.append({
-                                "name": f.name,
-                                "district": f.district,
-                                "state": f.state,
-                                "distance_km": f"{distance:.1f}",
-                                "coordinates": f"({f.lat:.4f}, {f.lon:.4f})" if (f.lat != 0.0 or f.lon != 0.0) else "N/A"
-                            })
-                        return ToolResult("search_fpo", True, {"fpos": fpos, "type": "nearest", "location": f"{village}, {state}"})
+                    return ToolResult("search_fpo", True, {
+                        "fpos": fpos, 
+                        "type": "nearest", 
+                        "location": f"{village}, {state}",
+                        "total_found": len(fpos),
+                        "search_method": "enhanced_geocoding_with_distance_calculation"
+                    })
             
-            # Fallback: list FPOs by state
-            state_fpos = [f for f in svc.fpos if f.state.lower() == state.lower()][:5]
+            # Fallback: Find FPOs by state using the service method
+            state_fpos = svc.find_fpos_by_state(state)[:5]
             fpos = []
-            for f in state_fpos:
+            
+            for fpo in state_fpos:
                 fpos.append({
-                    "name": f.name,
-                    "district": f.district,
-                    "state": f.state,
-                    "coordinates": f"({f.lat:.4f}, {f.lon:.4f})" if (f.lat != 0.0 or f.lon != 0.0) else "N/A"
+                    "name": fpo.name,
+                    "district": fpo.district,
+                    "state": fpo.state,
+                    "coordinates": f"({fpo.lat:.4f}, {fpo.lon:.4f})" if (fpo.lat != 0.0 or fpo.lon != 0.0) else "N/A"
                 })
                 
             if not fpos:
                 return ToolResult("search_fpo", True, {
                     "fpos": [],
-                    "message": f"No FPO data available for {state}",
-                    "type": "state_search"
+                    "message": f"No FPO data available for {state}. Database contains {svc.total_fpos()} FPOs total.",
+                    "type": "state_search",
+                    "data_source": "json_loaded" if svc.json_source_loaded() else "sample_data"
                 })
                 
-            return ToolResult("search_fpo", True, {"fpos": fpos, "type": "state", "state": state})
+            return ToolResult("search_fpo", True, {
+                "fpos": fpos, 
+                "type": "state", 
+                "state": state,
+                "total_in_state": len(state_fpos),
+                "data_source": "json_loaded" if svc.json_source_loaded() else "sample_data"
+            })
             
         except Exception as e:
             return ToolResult("search_fpo", False, None, str(e))

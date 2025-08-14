@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 # Import dual maps API service
 try:
-    from maps.dual_api_service import geocode_dual_api, calculate_distance as maps_calculate_distance
+    from maps.dual_api_service import geocode_geoapify, calculate_distance as maps_calculate_distance
     MAPS_API_AVAILABLE = True
 except ImportError:
     MAPS_API_AVAILABLE = False
@@ -37,9 +37,41 @@ class FPOService:
         self._json_loaded = False
         self.fpos = self._load_external_or_sample()
         self._geocoded_locations = {}  # Cache for geocoded locations
+        self._district_coordinates = {}  # Cache for district coordinates
+    
+    async def get_district_coordinates(self, district: str, state: str) -> Optional[Tuple[float, float]]:
+        """Get coordinates for a district using geocoding."""
+        cache_key = f"{district.lower()}, {state.lower()}"
+        
+        # Check cache first
+        if cache_key in self._district_coordinates:
+            return self._district_coordinates[cache_key]
+        
+        # Geocode the district
+        location_query = f"{district}, {state}, India"
+        coords = await self.geocode_location_async(location_query)
+        
+        if coords:
+            self._district_coordinates[cache_key] = coords
+            return coords
+        
+        return None
+    
+    async def ensure_fpo_coordinates(self, fpo: FPO) -> bool:
+        """Ensure FPO has coordinates, geocode district if needed."""
+        if fpo.lat != 0.0 or fpo.lon != 0.0:
+            return True  # Already has coordinates
+        
+        # Get coordinates for the district
+        coords = await self.get_district_coordinates(fpo.district, fpo.state)
+        if coords:
+            fpo.lat, fpo.lon = coords
+            return True
+        
+        return False
     
     async def geocode_location_async(self, location: str) -> Optional[Tuple[float, float]]:
-        """Geocode a location using dual maps API."""
+        """Geocode a location using Geoapify only."""
         if not MAPS_API_AVAILABLE:
             return None
         
@@ -48,13 +80,13 @@ class FPOService:
             return self._geocoded_locations[location]
         
         try:
-            result = await geocode_dual_api(location)
+            result = await geocode_geoapify(location)
             if result:
                 coords = (result.lat, result.lon)
                 self._geocoded_locations[location] = coords
                 return coords
         except Exception as e:
-            print(f"Geocoding error for {location}: {e}")
+            print(f"Geoapify geocoding error for {location}: {e}")
         
         return None
     
@@ -106,7 +138,8 @@ class FPOService:
             except Exception:
                 loaded = []
         if not loaded:
-            return self._load_sample_database()
+            print("Warning: No FPO data found. Please ensure fpo_data.json exists in the fpo/ directory.")
+            return []  # Return empty list instead of sample data
         fpos: List[FPO] = []
         for rec in loaded:
             # Keep lat/lon only if present and numeric; else set to 0.0 so we can skip for distance calc
@@ -129,41 +162,6 @@ class FPOService:
             ))
         return fpos
 
-    def _load_sample_database(self) -> List[FPO]:
-        """Sample fallback database."""
-        fpo_data = [
-            {"name": "Punjab Kisan Producer Company Ltd", "district": "Ludhiana", "state": "Punjab", "lat": 30.9010, "lon": 75.8573, "contact_person": "Harjit Singh", "phone": "+91-9876543210", "email": "info@punjabkisan.org", "crops": ["wheat", "rice", "cotton", "sugarcane"], "services": ["seeds", "fertilizers", "machinery", "marketing"], "registration_year": 2018, "members_count": 450},
-            {"name": "Malwa FPO", "district": "Bathinda", "state": "Punjab", "lat": 30.2118, "lon": 74.9455, "contact_person": "Gurpreet Kaur", "phone": "+91-9876543211", "crops": ["cotton", "wheat", "rice"], "services": ["organic inputs", "certification", "direct marketing"], "registration_year": 2019, "members_count": 320},
-            {"name": "Majha Farmers Producer Organization", "district": "Amritsar", "state": "Punjab", "lat": 31.6340, "lon": 74.8723, "contact_person": "Kuldeep Singh", "phone": "+91-9876543212", "crops": ["wheat", "rice", "vegetables"], "services": ["machinery rental", "storage", "processing"], "registration_year": 2020, "members_count": 280},
-            {"name": "Haryana Gramin Producer Company", "district": "Karnal", "state": "Haryana", "lat": 29.6857, "lon": 76.9905, "contact_person": "Raj Kumar", "phone": "+91-9876543213", "crops": ["wheat", "rice", "mustard", "sugarcane"], "services": ["input supply", "custom hiring", "marketing"], "registration_year": 2017, "members_count": 520},
-            {"name": "Mewat Farmers Collective", "district": "Nuh", "state": "Haryana", "lat": 28.1124, "lon": 77.0085, "contact_person": "Mohammad Rashid", "phone": "+91-9876543214", "crops": ["bajra", "wheat", "mustard"], "services": ["seeds", "training", "market linkage"], "registration_year": 2019, "members_count": 180},
-            {"name": "Western UP Farmers Producer Organization", "district": "Meerut", "state": "Uttar Pradesh", "lat": 28.9845, "lon": 77.7064, "contact_person": "Ramesh Chandra", "phone": "+91-9876543215", "crops": ["sugarcane", "wheat", "rice", "potato"], "services": ["machinery", "storage", "processing", "marketing"], "registration_year": 2018, "members_count": 680},
-            {"name": "Bundelkhand Kisan Producer Company", "district": "Jhansi", "state": "Uttar Pradesh", "lat": 25.4484, "lon": 78.5685, "contact_person": "Suresh Yadav", "phone": "+91-9876543216", "crops": ["wheat", "gram", "mustard", "sesame"], "services": ["drought-resistant seeds", "water management", "training"], "registration_year": 2020, "members_count": 420},
-            {"name": "Vidarbha Cotton Farmers Producer Organization", "district": "Nagpur", "state": "Maharashtra", "lat": 21.1458, "lon": 79.0882, "contact_person": "Dnyaneshwar Patil", "phone": "+91-9876543217", "crops": ["cotton", "soybean", "pigeon pea"], "services": ["organic farming", "certification", "export"], "registration_year": 2017, "members_count": 750},
-            {"name": "Western Maharashtra FPO", "district": "Pune", "state": "Maharashtra", "lat": 18.5204, "lon": 73.8567, "contact_person": "Prakash Shinde", "phone": "+91-9876543218", "crops": ["grapes", "pomegranate", "onion", "sugarcane"], "services": ["processing", "packaging", "export", "cold storage"], "registration_year": 2019, "members_count": 380},
-            {"name": "Karnataka Coffee Growers FPO", "district": "Chikmagalur", "state": "Karnataka", "lat": 13.3161, "lon": 75.7720, "contact_person": "Ravi Kumar", "phone": "+91-9876543219", "crops": ["coffee", "pepper", "cardamom"], "services": ["processing", "quality certification", "direct trade"], "registration_year": 2018, "members_count": 290},
-            {"name": "North Karnataka Farmers Collective", "district": "Belgaum", "state": "Karnataka", "lat": 15.8497, "lon": 74.4977, "contact_person": "Basavaraj Patil", "phone": "+91-9876543220", "crops": ["cotton", "sugarcane", "jowar", "groundnut"], "services": ["input supply", "machinery rental", "marketing"], "registration_year": 2020, "members_count": 460},
-            {"name": "Saurashtra Cotton Producer Organization", "district": "Rajkot", "state": "Gujarat", "lat": 22.3039, "lon": 70.8022, "contact_person": "Kiran Patel", "phone": "+91-9876543221", "crops": ["cotton", "groundnut", "castor"], "services": ["ginning", "marketing", "quality testing"], "registration_year": 2017, "members_count": 580},
-            {"name": "Kutch Farmers Producer Company", "district": "Kutch", "state": "Gujarat", "lat": 23.7337, "lon": 69.8597, "contact_person": "Bharat Shah", "phone": "+91-9876543222", "crops": ["cotton", "mustard", "cumin"], "services": ["organic certification", "processing", "export"], "registration_year": 2019, "members_count": 340},
-            {"name": "Rajasthan Desert Farmers FPO", "district": "Jodhpur", "state": "Rajasthan", "lat": 26.2389, "lon": 73.0243, "contact_person": "Mohan Lal", "phone": "+91-9876543223", "crops": ["bajra", "mustard", "gram", "guar"], "services": ["drought management", "seeds", "water conservation"], "registration_year": 2018, "members_count": 320},
-            {"name": "Tamil Nadu Rice Farmers FPO", "district": "Thanjavur", "state": "Tamil Nadu", "lat": 10.7870, "lon": 79.1378, "contact_person": "Murugan Selvam", "phone": "+91-9876543224", "crops": ["rice", "sugarcane", "cotton"], "services": ["custom milling", "marketing", "storage"], "registration_year": 2019, "members_count": 480},
-            {"name": "Andhra Spice Farmers Producer Organization", "district": "Guntur", "state": "Andhra Pradesh", "lat": 16.3067, "lon": 80.4365, "contact_person": "Venkata Rao", "phone": "+91-9876543225", "crops": ["chili", "turmeric", "cotton", "rice"], "services": ["processing", "grading", "export", "quality certification"], "registration_year": 2018, "members_count": 620},
-            {"name": "West Bengal Rice Producers Collective", "district": "Burdwan", "state": "West Bengal", "lat": 23.2324, "lon": 87.8615, "contact_person": "Tapan Das", "phone": "+91-9876543226", "crops": ["rice", "potato", "jute", "vegetables"], "services": ["seeds", "machinery", "marketing", "processing"], "registration_year": 2020, "members_count": 540},
-            {"name": "Madhya Pradesh Soybean FPO", "district": "Indore", "state": "Madhya Pradesh", "lat": 22.7196, "lon": 75.8577, "contact_person": "Rajesh Sharma", "phone": "+91-9876543227", "crops": ["soybean", "wheat", "cotton", "gram"], "services": ["oil processing", "marketing", "storage", "input supply"], "registration_year": 2017, "members_count": 700},
-            {"name": "Bihar Vegetable Growers FPO", "district": "Patna", "state": "Bihar", "lat": 25.5941, "lon": 85.1376, "contact_person": "Anil Kumar", "phone": "+91-9876543228", "crops": ["potato", "onion", "tomato", "cauliflower"], "services": ["cold storage", "packaging", "marketing", "transportation"], "registration_year": 2019, "members_count": 350},
-            {"name": "Odisha Tribal Farmers Producer Organization", "district": "Kalahandi", "state": "Odisha", "lat": 20.1333, "lon": 83.1667, "contact_person": "Suresh Majhi", "phone": "+91-9876543229", "crops": ["rice", "millets", "turmeric", "vegetables"], "services": ["organic certification", "processing", "tribal products marketing"], "registration_year": 2020, "members_count": 280}
-        ]
-        fpos: List[FPO] = []
-        for d in fpo_data:
-            fpos.append(FPO(
-                name=d["name"],
-                district=d["district"],
-                state=d["state"],
-                lat=d["lat"],
-                lon=d["lon"],
-            ))
-        return fpos
-    
     def find_nearest_fpos(self, lat: float, lon: float, limit: int = 5) -> List[Tuple[FPO, float]]:
         """Find nearest FPOs to a given location using enhanced distance calculation."""
         fpo_distances = []
@@ -179,51 +177,45 @@ class FPOService:
         return fpo_distances[:limit]
     
     async def find_nearest_fpos_with_geocoding(self, location_name: str, state: str = None, limit: int = 5) -> List[Tuple[FPO, float]]:
-        """Find nearest FPOs by geocoding location name first."""
-        # Geocode the location
-        coords = await self.geocode_location_async(f"{location_name}, {state}" if state else location_name)
-        if not coords:
+        """Find nearest FPOs by geocoding user location and calculating distances to state FPOs."""
+        # Geocode the user's location using Geoapify
+        user_coords = await self.geocode_location_async(f"{location_name}, {state}" if state else location_name)
+        if not user_coords:
             return []
         
-        lat, lon = coords
+        user_lat, user_lon = user_coords
         
-        # If state is specified, filter FPOs by state first
+        # Filter FPOs by state if specified
         if state:
             state_fpos = [fpo for fpo in self.fpos if fpo.state.lower() == state.lower()]
-            fpo_distances = []
-            for fpo in state_fpos:
-                # Skip entries lacking real coordinates
-                if fpo.lat == 0.0 and fpo.lon == 0.0:
-                    continue
-                distance = self.calculate_distance(lat, lon, fpo.lat, fpo.lon)
-                fpo_distances.append((fpo, distance))
+            if not state_fpos:
+                return []  # No FPOs in this state
         else:
-            # Search all FPOs
-            fpo_distances = []
-            for fpo in self.fpos:
-                if fpo.lat == 0.0 and fpo.lon == 0.0:
-                    continue
-                distance = self.calculate_distance(lat, lon, fpo.lat, fpo.lon)
-                fpo_distances.append((fpo, distance))
+            state_fpos = self.fpos
+        
+        # Ensure all FPOs have coordinates (geocode districts as needed)
+        fpos_with_coords = []
+        for fpo in state_fpos:
+            if await self.ensure_fpo_coordinates(fpo):
+                fpos_with_coords.append(fpo)
+        
+        if not fpos_with_coords:
+            return []  # No FPOs with coordinates
+        
+        # Calculate distances to all FPOs
+        fpo_distances = []
+        for fpo in fpos_with_coords:
+            # Calculate distance using dual API
+            distance = self.calculate_distance(user_lat, user_lon, fpo.lat, fpo.lon)
+            fpo_distances.append((fpo, distance))
         
         # Sort by distance and return top results
         fpo_distances.sort(key=lambda x: x[1])
         return fpo_distances[:limit]
     
     def enhance_fpo_with_coordinates(self, fpo: FPO) -> FPO:
-        """Try to enhance FPO with coordinates by geocoding its location."""
-        if fpo.lat != 0.0 or fpo.lon != 0.0:
-            return fpo  # Already has coordinates
-        
-        # Try to geocode using district and state
-        location_string = f"{fpo.district}, {fpo.state}, India"
-        coords = self.geocode_location_sync(location_string)
-        
-        if coords:
-            fpo.lat, fpo.lon = coords
-            print(f"Enhanced {fpo.name} with coordinates: {coords}")
-        
-        return fpo
+        """FPO coordinates are now auto-assigned on initialization, so this is mostly a no-op."""
+        return fpo  # Coordinates already assigned in __init__
     
     def find_fpos_by_state(self, state: str) -> List[FPO]:
         """Find all FPOs in a specific state"""
@@ -232,15 +224,3 @@ class FPOService:
         return self._json_loaded
     def total_fpos(self) -> int:
         return len(self.fpos)
-
-def get_fpo_registration_benefits() -> List[str]:
-    """Deprecated: benefits content removed in minimal build."""
-    return []
-
-def get_fpo_registration_process() -> List[str]:
-    """Deprecated: registration content removed in minimal build."""
-    return []
-
-def get_government_schemes_for_fpos() -> List[str]:
-    """Deprecated: schemes content removed in minimal build."""
-    return []
