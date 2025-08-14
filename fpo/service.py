@@ -1,45 +1,94 @@
 """
 FPO (Farmer Producer Organization) Service for Krishi Dhan Sahayak
-Helps farmers find nearby FPOs and learn about registration benefits
+Enhanced with dual maps API support for accurate geocoding and distance calculation
 """
 
 import json
 import math
 import os
+import asyncio
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
+# Import dual maps API service
+try:
+    from maps.dual_api_service import geocode_dual_api, calculate_distance as maps_calculate_distance
+    MAPS_API_AVAILABLE = True
+except ImportError:
+    MAPS_API_AVAILABLE = False
+
 @dataclass
 class FPO:
-    """Farmer Producer Organization data structure"""
+    """Farmer Producer Organization with minimal fields (name and location)."""
     name: str
     district: str
     state: str
     lat: float
     lon: float
-    contact_person: str
-    phone: str
-    email: str = ""
-    crops: List[str] = None
-    services: List[str] = None
-    registration_year: int = None
-    members_count: int = None
-
-    def __post_init__(self):
-        if self.crops is None:
-            self.crops = []
-        if self.services is None:
-            self.services = []
 
 class FPOService:
     """Service for finding and managing FPO information.
 
+    Enhanced with dual maps API support for accurate geocoding and distance calculation.
     Attempts to load extracted JSON (fpo_data.json) from pdf_extract.py.
     Falls back to bundled sample dataset if JSON missing or invalid.
     """
     def __init__(self):
         self._json_loaded = False
         self.fpos = self._load_external_or_sample()
+        self._geocoded_locations = {}  # Cache for geocoded locations
+    
+    async def geocode_location_async(self, location: str) -> Optional[Tuple[float, float]]:
+        """Geocode a location using dual maps API."""
+        if not MAPS_API_AVAILABLE:
+            return None
+        
+        # Check cache first
+        if location in self._geocoded_locations:
+            return self._geocoded_locations[location]
+        
+        try:
+            result = await geocode_dual_api(location)
+            if result:
+                coords = (result.lat, result.lon)
+                self._geocoded_locations[location] = coords
+                return coords
+        except Exception as e:
+            print(f"Geocoding error for {location}: {e}")
+        
+        return None
+    
+    def geocode_location_sync(self, location: str) -> Optional[Tuple[float, float]]:
+        """Synchronous wrapper for geocoding."""
+        try:
+            return asyncio.run(self.geocode_location_async(location))
+        except Exception:
+            return None
+    
+    def calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Calculate distance using maps API if available, otherwise fallback to Haversine."""
+        if MAPS_API_AVAILABLE:
+            return maps_calculate_distance(lat1, lon1, lat2, lon2)
+        else:
+            # Fallback to original Haversine implementation
+            return self._calculate_distance_haversine(lat1, lon1, lat2, lon2)
+    
+    def _calculate_distance_haversine(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Original Haversine distance calculation as fallback."""
+        R = 6371  # Earth's radius in kilometers
+        
+        lat1_rad = math.radians(lat1)
+        lon1_rad = math.radians(lon1)
+        lat2_rad = math.radians(lat2)
+        lon2_rad = math.radians(lon2)
+        
+        dlat = lat2_rad - lat1_rad
+        dlon = lon2_rad - lon1_rad
+        
+        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        
+        return R * c
     
     def _load_external_or_sample(self) -> List[FPO]:
         json_path = os.path.join(os.path.dirname(__file__), 'fpo_data.json')
@@ -60,30 +109,23 @@ class FPOService:
             return self._load_sample_database()
         fpos: List[FPO] = []
         for rec in loaded:
-            # Keep lat/lon only if present and numeric; else set to None so we can skip for distance calc
+            # Keep lat/lon only if present and numeric; else set to 0.0 so we can skip for distance calc
             raw_lat = rec.get('lat')
             raw_lon = rec.get('lon')
             try:
-                lat_val = float(raw_lat) if raw_lat not in (None, "",) else None
+                lat_val = float(raw_lat) if raw_lat not in (None, "",) else 0.0
             except (TypeError, ValueError):
-                lat_val = None
+                lat_val = 0.0
             try:
-                lon_val = float(raw_lon) if raw_lon not in (None, "",) else None
+                lon_val = float(raw_lon) if raw_lon not in (None, "",) else 0.0
             except (TypeError, ValueError):
-                lon_val = None
+                lon_val = 0.0
             fpos.append(FPO(
                 name=rec.get('name',''),
                 district=rec.get('district',''),
                 state=rec.get('state',''),
-                lat=lat_val or 0.0,
-                lon=lon_val or 0.0,
-                contact_person=rec.get('contact_person','(unknown)'),
-                phone=rec.get('phone',''),
-                email=rec.get('email',''),
-                crops=rec.get('crops') or [],
-                services=rec.get('services') or [],
-                registration_year=rec.get('registration_year'),
-                members_count=rec.get('members_count')
+                lat=lat_val,
+                lon=lon_val,
             ))
         return fpos
 
@@ -119,35 +161,11 @@ class FPOService:
                 state=d["state"],
                 lat=d["lat"],
                 lon=d["lon"],
-                contact_person=d["contact_person"],
-                phone=d["phone"],
-                email=d.get("email", ""),
-                crops=d.get("crops", []),
-                services=d.get("services", []),
-                registration_year=d.get("registration_year"),
-                members_count=d.get("members_count")
             ))
         return fpos
     
-    def calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Calculate distance between two points using Haversine formula"""
-        R = 6371  # Earth's radius in kilometers
-        
-        lat1_rad = math.radians(lat1)
-        lon1_rad = math.radians(lon1)
-        lat2_rad = math.radians(lat2)
-        lon2_rad = math.radians(lon2)
-        
-        dlat = lat2_rad - lat1_rad
-        dlon = lon2_rad - lon1_rad
-        
-        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
-        c = 2 * math.asin(math.sqrt(a))
-        
-        return R * c
-    
     def find_nearest_fpos(self, lat: float, lon: float, limit: int = 5) -> List[Tuple[FPO, float]]:
-        """Find nearest FPOs to a given location"""
+        """Find nearest FPOs to a given location using enhanced distance calculation."""
         fpo_distances = []
         for fpo in self.fpos:
             # Skip entries lacking real coordinates (lat/lon left as 0.0 from missing data)
@@ -160,159 +178,69 @@ class FPOService:
         fpo_distances.sort(key=lambda x: x[1])
         return fpo_distances[:limit]
     
+    async def find_nearest_fpos_with_geocoding(self, location_name: str, state: str = None, limit: int = 5) -> List[Tuple[FPO, float]]:
+        """Find nearest FPOs by geocoding location name first."""
+        # Geocode the location
+        coords = await self.geocode_location_async(f"{location_name}, {state}" if state else location_name)
+        if not coords:
+            return []
+        
+        lat, lon = coords
+        
+        # If state is specified, filter FPOs by state first
+        if state:
+            state_fpos = [fpo for fpo in self.fpos if fpo.state.lower() == state.lower()]
+            fpo_distances = []
+            for fpo in state_fpos:
+                # Skip entries lacking real coordinates
+                if fpo.lat == 0.0 and fpo.lon == 0.0:
+                    continue
+                distance = self.calculate_distance(lat, lon, fpo.lat, fpo.lon)
+                fpo_distances.append((fpo, distance))
+        else:
+            # Search all FPOs
+            fpo_distances = []
+            for fpo in self.fpos:
+                if fpo.lat == 0.0 and fpo.lon == 0.0:
+                    continue
+                distance = self.calculate_distance(lat, lon, fpo.lat, fpo.lon)
+                fpo_distances.append((fpo, distance))
+        
+        # Sort by distance and return top results
+        fpo_distances.sort(key=lambda x: x[1])
+        return fpo_distances[:limit]
+    
+    def enhance_fpo_with_coordinates(self, fpo: FPO) -> FPO:
+        """Try to enhance FPO with coordinates by geocoding its location."""
+        if fpo.lat != 0.0 or fpo.lon != 0.0:
+            return fpo  # Already has coordinates
+        
+        # Try to geocode using district and state
+        location_string = f"{fpo.district}, {fpo.state}, India"
+        coords = self.geocode_location_sync(location_string)
+        
+        if coords:
+            fpo.lat, fpo.lon = coords
+            print(f"Enhanced {fpo.name} with coordinates: {coords}")
+        
+        return fpo
+    
     def find_fpos_by_state(self, state: str) -> List[FPO]:
         """Find all FPOs in a specific state"""
         return [fpo for fpo in self.fpos if fpo.state.lower() == state.lower()]
-    
-    def find_fpos_by_crop(self, crop: str) -> List[FPO]:
-        """Find FPOs that deal with a specific crop"""
-        crop_lower = crop.lower()
-        return [fpo for fpo in self.fpos if any(crop_lower in c.lower() for c in fpo.crops)]
-    def find_fpos_by_service(self, service: str) -> List[FPO]:
-        s = service.lower()
-        return [fpo for fpo in self.fpos if any(s in serv.lower() for serv in fpo.services)]
     def json_source_loaded(self) -> bool:
         return self._json_loaded
     def total_fpos(self) -> int:
         return len(self.fpos)
 
 def get_fpo_registration_benefits() -> List[str]:
-    """Get comprehensive list of FPO registration benefits"""
-    return [
-        "🏦 **Financial Benefits:**",
-        "   • Access to institutional credit at lower interest rates",
-        "   • Government subsidies and grants up to ₹15 lakhs per FPO",
-        "   • Easier loan approval with FPO as collateral",
-        "   • Reduced transaction costs through collective bargaining",
-        "",
-        "💰 **Market Access:**", 
-        "   • Direct access to wholesale and retail markets",
-        "   • Elimination of middlemen, leading to better prices",
-        "   • Contract farming opportunities with companies",
-        "   • Export opportunities for quality produce",
-        "",
-        "🌱 **Input Supply:**",
-        "   • Bulk purchase of seeds, fertilizers at discounted rates",
-        "   • Quality assurance of inputs through collective procurement",
-        "   • Access to latest agricultural technologies and machinery",
-        "   • Reduced input costs by 10-20% on average",
-        "",
-        "📚 **Knowledge & Training:**",
-        "   • Regular training on modern farming techniques",
-        "   • Workshops on crop diversification and value addition",
-        "   • Technical support from agricultural experts",
-        "   • Digital literacy and technology adoption programs",
-        "",
-        "🏭 **Processing & Value Addition:**",
-        "   • Collective processing facilities (mills, storage, packaging)",
-        "   • Brand development and marketing support",
-        "   • Quality certification (organic, FSSAI, etc.)",
-        "   • Cold storage and post-harvest management",
-        "",
-        "⚖️ **Legal & Regulatory:**",
-        "   • Legal entity status with limited liability",
-        "   • Tax benefits and exemptions under various schemes",
-        "   • Professional management and governance structure",
-        "   • Dispute resolution mechanisms",
-        "",
-        "🌾 **Agricultural Support:**",
-        "   • Crop insurance at group rates",
-        "   • Weather-based advisory services",
-        "   • Soil testing and farm advisory services",
-        "   • Integrated pest management programs"
-    ]
+    """Deprecated: benefits content removed in minimal build."""
+    return []
 
 def get_fpo_registration_process() -> List[str]:
-    """Get step-by-step FPO registration process"""
-    return [
-        "📋 **FPO Registration Process:**",
-        "",
-        "**Step 1: Formation & Planning**",
-        "   • Form a group of minimum 10 farmers (300+ for Primary Agricultural Credit Societies)",
-        "   • Conduct awareness meetings in your village/cluster",
-        "   • Identify common crops/activities for collective action",
-        "   • Elect interim leadership (President, Secretary, Treasurer)",
-        "",
-        "**Step 2: Legal Registration**",
-        "   • Choose registration type: Producer Company under Companies Act 2013",
-        "   • Prepare required documents (see document list below)",
-        "   • Apply through ROC (Registrar of Companies) online portal",
-        "   • Obtain Certificate of Incorporation (15-30 days)",
-        "",
-        "**Step 3: Required Documents**",
-        "   • Memorandum and Articles of Association",
-        "   • Form INC-7 (Application for incorporation)",
-        "   • Identity & address proof of all directors/members",
-        "   • Land records/farming evidence of members",
-        "   • Consent letters from all founding members",
-        "",
-        "**Step 4: Post-Registration Setup**",
-        "   • Open bank account with incorporation certificate",
-        "   • Register for GST if annual turnover expected > ₹40 lakhs",
-        "   • Apply for relevant licenses (FSSAI, Organic certification)",
-        "   • Conduct first General Body meeting and elect Board",
-        "",
-        "**Step 5: Government Support & Funding**",
-        "   • Apply for government schemes through SFAC (Small Farmers' Agri-Business Consortium)",
-        "   • Submit business plan for ₹15 lakh matching grant",
-        "   • Register on GeM portal for government procurement",
-        "   • Connect with NABARD for credit linkage",
-        "",
-        "**Step 6: Operational Setup**",
-        "   • Hire professional CEO/Manager if required",
-        "   • Set up basic infrastructure (office, storage, etc.)",
-        "   • Start collective procurement and marketing activities",
-        "   • Maintain proper books of accounts and records",
-        "",
-        "⏰ **Timeline:** Complete process takes 2-6 months",
-        "💰 **Cost:** ₹15,000 - ₹50,000 (including professional help)",
-        "📞 **Support:** Contact your nearest KVK (Krishi Vigyan Kendra) or District Collector office"
-    ]
+    """Deprecated: registration content removed in minimal build."""
+    return []
 
 def get_government_schemes_for_fpos() -> List[str]:
-    """Get list of government schemes supporting FPOs"""
-    return [
-        "🏛️ **Major Government Schemes for FPOs:**",
-        "",
-        "**1. Formation and Promotion of FPOs Scheme (2020-21 to 2027-28)**",
-        "   • Central Sector Scheme with ₹6,865 crore budget",
-        "   • Formation of 10,000 new FPOs across India",
-        "   • ₹18.50 lakh support per FPO over 5 years",
-        "   • Cluster-based approach for better sustainability",
-        "",
-        "**2. NABARD - Producer Organization Development Fund**",
-        "   • Credit support up to ₹100 crore per FPO",
-        "   • Interest subvention schemes",
-        "   • Capacity building and training programs",
-        "   • Infrastructure development support",
-        "",
-        "**3. SFAC (Small Farmers' Agri-Business Consortium) Support**",
-        "   • Matching equity grant up to ₹15 lakh per FPO",
-        "   • Credit guarantee fund coverage",
-        "   • Market linkage and handholding support",
-        "   • Business development services",
-        "",
-        "**4. Mission for Integrated Development of Horticulture (MIDH)**",
-        "   • Support for horticulture-focused FPOs",
-        "   • Infrastructure development grants",
-        "   • Processing and value addition support",
-        "   • Market infrastructure development",
-        "",
-        "**5. National Food Security Mission (NFSM)**",
-        "   • Support for FPOs in rice, wheat, pulses, coarse cereals",
-        "   • Seed production and processing support",
-        "   • Technology demonstration and training",
-        "   • Custom hiring centers establishment",
-        "",
-        "**6. Paramparagat Krishi Vikas Yojana (PKVY)**",
-        "   • Support for organic farming FPOs",
-        "   • Cluster approach with ₹50,000 per hectare support",
-        "   • Organic certification and marketing support",
-        "   • Premium price realization for organic produce",
-        "",
-        "**7. PM-KISAN FPO Scheme**",
-        "   • Direct benefit transfer to FPO members",
-        "   • Priority in government procurement",
-        "   • Preferential treatment in various schemes",
-        "   • Digital platform integration"
-    ]
+    """Deprecated: schemes content removed in minimal build."""
+    return []

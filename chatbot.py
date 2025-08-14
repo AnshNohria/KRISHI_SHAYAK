@@ -7,20 +7,26 @@ Minimal interface that routes all queries through the Gemini agent (tools-backed
 import os
 import asyncio
 from typing import Optional, Tuple
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 from weather.service import (
     geocode_openweather,
     geocode_visual_crossing,
+    geocode_freeform,
     check_api_configuration,
 )
 from core.profile import update_last_location, get_last_location
-from ai.agent import GeminiAgent
+from ai.agent import GeminiToolAgent
 
 class KrishiChatbot:
     """Agent-first Agricultural Terminal Chatbot (minimal)."""
 
     def __init__(self):
         self.running = True
-        self.agent = GeminiAgent()  # agent handles validation and tool-calls
+        self.agent = GeminiToolAgent()  # agent handles validation and tool-calls
         # Optional spelling corrections kept minimal
         self.keyword_corrections = {
             'ferilizer': 'fertilizer', 'fertlizer': 'fertilizer', 'fertilzer': 'fertilizer',
@@ -62,12 +68,19 @@ class KrishiChatbot:
         for wrong, right in self.keyword_corrections.items():
             processed = processed.replace(wrong, right)
         # Save location command
-        if processed.startswith('set my location to '):
-            loc_frag = processed.replace('set my location to ', '').strip()
+        if processed.startswith('set my location to ') or processed.startswith('set location to '):
+            loc_frag = processed.replace('set my location to ', '').replace('set location to ', '').strip()
             v = s = None
             if ',' in loc_frag:
                 v, s = self._parse_village_state_simple(loc_frag)
             if not (v and s):
+                # Try free-form geocoding as a convenience
+                async def _free():
+                    return await geocode_freeform(loc_frag)
+                gff = asyncio.run(_free())
+                if gff:
+                    update_last_location(gff['name'], gff.get('state') or '', gff['lat'], gff['lon'])
+                    return f"📍 Saved location: {gff['name']}, {gff.get('state','').title()} ({gff['lat']:.4f},{gff['lon']:.4f})"
                 return "❌ Use comma separated: set my location to Patna, Bihar"
             async def _geo():
                 return await geocode_openweather(v, s) or await geocode_visual_crossing(v, s)
@@ -85,6 +98,12 @@ class KrishiChatbot:
                 if stopper in loc_frag:
                     loc_frag = loc_frag.split(stopper, 1)[0].strip()
             v, s = self._parse_village_state_simple(loc_frag)
+            if not (v and s):
+                async def _free2():
+                    return await geocode_freeform(loc_frag)
+                gff2 = asyncio.run(_free2())
+                if gff2:
+                    v, s = gff2['name'], gff2.get('state') or ''
         if not (v and s):
             last = get_last_location()
             if last:

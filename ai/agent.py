@@ -1,13 +1,14 @@
 """
-Gemini Orchestrator: routes user queries to tools (weather, maps, FPO, RAG) and
-builds answers strictly from tool-backed data. Optionally merges call-center
-transcripts if present. Falls back gracefully if Gemini or APIs are unavailable.
+Gemini Tool-Calling Agent: Uses Gemini to intelligently route queries to appropriate tools
+(weather, maps, FPO, RAG) and compose responses. Gemini acts as the orchestrator that
+decides which tools to call based on user intent and composes the final response.
 
-Activation: set GEMINI_API_KEY in environment. Otherwise, this module is idle.
+Activation: set GEMINI_API_KEY in environment. This is now required for proper operation.
 """
 from __future__ import annotations
 import os
 import glob
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,242 +23,383 @@ from sentence_transformers import SentenceTransformer
 import weather.service as ws
 from fpo.service import FPOService
 from rag.retriever import get_retriever
-
-
-def _is_agri_query(q: str) -> bool:
-    ql = q.lower()
-    stems = ['fertil', 'irrig', 'crop', 'seed', 'fpo', 'soil', 'pest', 'tractor', 'harvest', 'kvk', 'krishi', 'weather', 'rain']
-    return any(s in ql for s in stems)
+from maps.dual_api_service import search_agri_shops_dual, geocode_dual_api
 
 
 @dataclass
-class SourceDoc:
-    kind: str  # 'weather' | 'maps' | 'fpo' | 'rag' | 'transcript'
-    title: str
-    text: str
-    meta: Dict[str, Any]
+class ToolResult:
+    tool_name: str
+    success: bool
+    data: Any
+    error: Optional[str] = None
 
 
-class TranscriptIndex:
+class GeminiToolAgent:
     def __init__(self):
-        self._loaded = False
-        self._texts: List[str] = []
-        self._metas: List[Dict[str, Any]] = []
-        self._embeds = None
-        self._model: Optional[SentenceTransformer] = None
-
-    def _load_all(self):
-        if self._loaded:
-            return
-        base = os.path.join('data', 'call_center')
-        paths = []
-        for pat in ('*.txt', '*.md', '*.jsonl', '*.json'):
-            paths.extend(glob.glob(os.path.join(base, pat)))
-        if not paths:
-            self._loaded = True
-            return
-        texts: List[str] = []
-        metas: List[Dict[str, Any]] = []
-        for p in paths:
-            try:
-                with open(p, 'r', encoding='utf-8', errors='ignore') as f:
-                    txt = f.read()
-                    if txt and len(txt.strip()) > 20:
-                        texts.append(txt[:5000])  # cap per item to keep it light
-                        metas.append({'file': os.path.basename(p)})
-            except Exception:
-                continue
-        self._texts = texts
-        self._metas = metas
-        if texts:
-            self._model = SentenceTransformer('all-MiniLM-L6-v2')
-            self._embeds = self._model.encode(texts, normalize_embeddings=True)
-        self._loaded = True
-
-    def topk(self, query: str, k: int = 3) -> List[SourceDoc]:
-        self._load_all()
-        if not self._texts or self._embeds is None or self._model is None:
-            return []
-        q = self._model.encode([query], normalize_embeddings=True)[0]
-        import numpy as np  # local import to avoid hard dep in cold paths
-        sims = (self._embeds @ q)  # cosine since normalized
-        idxs = np.argsort(-sims)[:k]
-        out: List[SourceDoc] = []
-        for i in idxs:
-            score = float(sims[i])
-            if score < 0.25:
-                continue
-            out.append(SourceDoc(kind='transcript', title=self._metas[i]['file'], text=self._texts[i], meta={'score': score}))
-        return out
-
-
-class GeminiAgent:
-    def __init__(self):
-        self.enabled = bool(os.getenv('GEMINI_API_KEY')) and genai is not None
-        if self.enabled:
-            genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-            # Light, cheap; we only ask it to summarize sources, not browse
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-        self.transcripts = TranscriptIndex()
-        self.rag = get_retriever()
-
-    async def _geocode(self, village: Optional[str], state: Optional[str]) -> Optional[Tuple[float, float]]:
-        if not village or not state:
-            return None
-        g = await ws.geocode_openweather(village, state) or await ws.geocode_visual_crossing(village, state)
-        if g:
-            return (g['lat'], g['lon'])
-        return None
-
-    def _collect_rag(self, query: str) -> List[SourceDoc]:
-        docs = self.rag.query(query, k=5)
-        out: List[SourceDoc] = []
-        for d in docs:
-            out.append(SourceDoc(kind='rag', title=d.get('heading') or d.get('source') or 'ICAR Advisory', text=d['text'], meta={'score': d.get('score'), 'source': d.get('source')}))
-        return out
-
-    async def _collect_weather(self, village: Optional[str], state: Optional[str]) -> List[SourceDoc]:
-        if not village or not state:
-            return []
-        geo = await self._geocode(village, state)
-        if not geo:
-            return []
-        lat, lon = geo
-        try:
-            w = await ws.get_weather(lat, lon)
-            advice = ws.generate_agricultural_advice(w)
-            return [SourceDoc(kind='weather', title=f"Weather for {village}, {state}", text=advice, meta={'lat': lat, 'lon': lon})]
-        except Exception:
-            return []
-
-    async def _collect_maps(self, query_lower: str, village: Optional[str], state: Optional[str]) -> List[SourceDoc]:
-        # Detect shop intent or KVK
-        shop_map = {
-            'fertilizer shop': 'fertilizer shop', 'seed shop': 'seed shop', 'pesticide shop': 'pesticide shop',
-            'tractor dealer': 'tractor dealer', 'farm machinery': 'farm machinery', 'fertilizer': 'fertilizer shop', 'seed': 'seed shop'
-        }
-        key = os.getenv('GEOAPIFY_API_KEY')
-        if not (village and state):
-            return []
-        geo = await self._geocode(village, state)
-        if not geo or not key:
-            return []
-        # KVK detection first
-        if any(k in query_lower for k in ['kvk', 'krishi vigyan kendra', 'vigyan kendra']):
-            try:
-                from maps.service import search_kvk
-                kvks = await search_kvk(geo[0], geo[1], key)
-            except Exception:
-                kvks = []
-            if not kvks:
-                return []
-            lines = []
-            for r in kvks[:5]:
-                line = f"{r['name']} - {r.get('address','')} ({r.get('distance_km','?')} km)\n{r.get('maps_url','')}"
-                lines.append(line)
-            return [SourceDoc(kind='maps', title=f"KVK near {village}, {state}", text='\n'.join(lines), meta={'count': len(kvks)})]
-        # Shops
-        keyword = None
-        for k in shop_map:
-            if k in query_lower:
-                keyword = shop_map[k]
-                break
-        if not keyword:
-            return []
-        # Import at call-time so tests can monkeypatch maps.service.search_agri_shops
-        from maps.service import search_agri_shops
-        results = await search_agri_shops(keyword, geo[0], geo[1], key)
-        if not results:
-            return []
-        lines = []
-        for r in results[:5]:
-            line = f"{r['name']} - {r.get('address','')} ({r.get('distance_km','?')} km)"
-            if r.get('maps_url'):
-                line += f"\n{r['maps_url']}"
-            lines.append(line)
-        return [SourceDoc(kind='maps', title=f"{keyword.title()} near {village}, {state}", text='\n'.join(lines), meta={'count': len(results)})]
-
-    async def _collect_fpo(self, village: Optional[str], state: Optional[str]) -> List[SourceDoc]:
-        if not state:
-            return []
-        svc = FPOService()
-        geo = None
-        if village:
-            geo = await self._geocode(village, state)
-        lines = []
-        if geo:
-            nearest = svc.find_nearest_fpos(geo[0], geo[1], limit=5)
-            for f, d in nearest:
-                lines.append(f"{f.name} - {f.district} ({d:.1f} km) | {', '.join(f.services[:6])}")
-        else:
-            # Fallback: list by state
-            count = 0
-            for f in svc.fpos:
-                if f.state.lower() == state.lower():
-                    lines.append(f"{f.name} - {f.district} | {', '.join(f.services[:6])}")
-                    count += 1
-                    if count >= 5:
-                        break
-        if not lines:
-            return []
-        return [SourceDoc(kind='fpo', title=f"FPOs in/near {village+', ' if village else ''}{state}", text='\n'.join(lines), meta={})]
-
-    def _compose_with_gemini(self, query: str, sources: List[SourceDoc]) -> str:
+        # Check for both GOOGLE_API_KEY (new) and GEMINI_API_KEY (old) for compatibility
+        api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+        self.enabled = bool(api_key) and genai is not None
         if not self.enabled:
-            return ''
-        # Build a strict prompt: must only use provided sources
-        src_text = []
-        for i, s in enumerate(sources, 1):
-            src_text.append(f"[{i}] ({s.kind}) {s.title}\n{s.text[:2000]}")
-        system = (
-            "You are an agriculture assistant. Answer ONLY using the provided sources. "
-            "Do not invent data. If sources are insufficient, say: 'I don't have enough verified data to answer.' "
-            "Keep it concise and practical."
-        )
-        prompt = f"{system}\n\nUser question:\n{query}\n\nSources:\n" + "\n\n".join(src_text)
+            raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required for the tool-calling agent")
+        
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.rag = get_retriever()
+        
+    def _extract_intent_and_location(self, query: str) -> Dict[str, Any]:
+        """Use Gemini to extract intent and location from any free-form query."""
+        schema_prompt = """
+Extract information from the user query and respond with JSON only:
+{
+  "intent": "weather|shop|kvk|fpo|advisory|other",
+  "location": {
+    "village": "village name or null", 
+    "state": "state name or null"
+  },
+  "shop_type": "fertilizer|seed|pesticide|tractor|equipment or null",
+  "needs_weather": true/false,
+  "needs_location": true/false
+}
+
+Intent meanings:
+- weather: user wants weather information
+- shop: user wants to find agricultural shops (fertilizer, seed, pesticide, tractor dealers)
+- kvk: user wants KVK (Krishi Vigyan Kendra) information
+- fpo: user wants FPO (Farmer Producer Organization) information  
+- advisory: user wants farming advice/guidance
+- other: general agricultural questions
+
+User query: """ + query
+
         try:
-            resp = self.model.generate_content(prompt)
-            text = getattr(resp, 'text', '') or ''
-            return text.strip()
+            response = self.model.generate_content(schema_prompt)
+            text = getattr(response, 'text', '') or ''
+            text = text.strip().strip('`json').strip('`')
+            
+            start = text.find('{')
+            end = text.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                text = text[start:end+1]
+                
+            return json.loads(text)
         except Exception:
-            return ''
+            return {
+                "intent": "other",
+                "location": {"village": None, "state": None},
+                "shop_type": None,
+                "needs_weather": False,
+                "needs_location": False
+            }
 
-    async def run(self, query: str, village: Optional[str], state: Optional[str]) -> str:
-        ql = query.lower()
-        if not _is_agri_query(ql):
-            return "This query is not related to farming."
+    async def _execute_get_weather(self, village: str, state: str) -> ToolResult:
+        """Execute weather tool."""
+        try:
+            weather_data = await ws.get_weather(village, state)
+            advice = ws.generate_agricultural_advice(weather_data)
+            
+            result = {
+                "location": f"{weather_data.location_name} ({weather_data.lat:.4f},{weather_data.lon:.4f})",
+                "temperature": f"{weather_data.temperature:.1f}°C" if weather_data.temperature else None,
+                "humidity": f"{weather_data.humidity:.0f}%" if weather_data.humidity else None,
+                "wind": f"{weather_data.wind_speed:.1f} m/s" if weather_data.wind_speed else None,
+                "rain_chance": f"{weather_data.precipitation_prob:.0f}%" if weather_data.precipitation_prob else None,
+                "advice": advice,
+                "sources": weather_data.data_sources
+            }
+            return ToolResult("get_weather", True, result)
+        except Exception as e:
+            return ToolResult("get_weather", False, None, str(e))
 
-        # Collect sources
-        sources: List[SourceDoc] = []
-        # If FPO is requested but we have no location/state, short-circuit with guard
-        if ('fpo' in ql or 'producer' in ql) and not state:
-            return "I don't have enough verified data to answer."
-        # RAG always
-        sources.extend(self._collect_rag(query))
-        # Weather if looks like weather/location request
-        weather_terms = ['weather', 'rain', 'forecast', 'temperature']
-        if any(t in ql for t in weather_terms):
-            sources.extend(await self._collect_weather(village, state))
-        # Shops/maps
-        sources.extend(await self._collect_maps(ql, village, state))
-        # FPO
-        if 'fpo' in ql or 'producer' in ql:
-            sources.extend(await self._collect_fpo(village, state))
-        # Transcripts for personalization
-        sources.extend(self.transcripts.topk(query, k=2))
+    async def _execute_search_shops(self, shop_type: str, village: str, state: str) -> ToolResult:
+        """Execute shop search tool using dual maps API."""
+        try:
+            # Use dual API geocoding
+            result = await geocode_dual_api(f"{village}, {state}")
+            if not result:
+                return ToolResult("search_shops", False, None, f"Could not find location: {village}, {state}")
+                
+            # Map shop type to search terms
+            shop_keywords = {
+                "fertilizer": "fertilizer shop",
+                "seed": "seed shop", 
+                "pesticide": "pesticide shop",
+                "tractor": "tractor dealer",
+                "equipment": "farm machinery"
+            }
+            keyword = shop_keywords.get(shop_type, shop_type)
+            
+            # Search using dual maps API
+            results = await search_agri_shops_dual(keyword, result.lat, result.lon)
+            
+            if not results:
+                return ToolResult("search_shops", True, {
+                    "shops": [],
+                    "message": f"No {keyword} found near {village}, {state}",
+                    "type": keyword
+                })
+                
+            shops = []
+            for shop in results[:5]:
+                shops.append({
+                    "name": shop['name'],
+                    "address": shop.get('address', ''),
+                    "distance_km": shop.get('distance_km', ''),
+                    "maps_url": shop.get('maps_url', ''),
+                    "source": shop.get('source', 'dual_api')
+                })
+                
+            return ToolResult("search_shops", True, {
+                "shops": shops,
+                "count": len(results),
+                "type": keyword
+            })
+        except Exception as e:
+            return ToolResult("search_shops", False, None, str(e))
 
-        # Gate: if no sources -> return farming-related guard
-        if not sources:
-            return "I don't have enough verified data to answer."
+    async def _execute_search_kvk(self, village: str, state: str) -> ToolResult:
+        """Execute KVK search tool."""
+        try:
+            # Geocode location first
+            geo = await ws.geocode_openweather(village, state) or await ws.geocode_visual_crossing(village, state)
+            if not geo:
+                return ToolResult("search_kvk", False, None, f"Could not find location: {village}, {state}")
+                
+            key = os.getenv('GEOAPIFY_API_KEY')
+            if not key:
+                return ToolResult("search_kvk", False, None, "GEOAPIFY_API_KEY not configured")
+                
+            from maps.service import search_kvk
+            results, used_radius = await search_kvk(geo['lat'], geo['lon'], key)
+            
+            if not results:
+                km = int(round(used_radius/1000))
+                return ToolResult("search_kvk", True, {
+                    "kvks": [],
+                    "message": f"No KVK found within {km} km of {village}, {state}",
+                    "radius_km": km
+                })
+                
+            kvks = []
+            for kvk in results[:5]:
+                kvks.append({
+                    "name": kvk['name'],
+                    "address": kvk.get('address', ''),
+                    "distance_km": kvk.get('distance_km', ''),
+                    "maps_url": kvk.get('maps_url', '')
+                })
+                
+            return ToolResult("search_kvk", True, {
+                "kvks": kvks,
+                "count": len(results)
+            })
+        except Exception as e:
+            return ToolResult("search_kvk", False, None, str(e))
 
-        # If Gemini available, compose with it, else return stitched summary
-        if self.enabled:
-            out = self._compose_with_gemini(query, sources)
-            if out:
-                return out
-        # Fallback stitching
-        lines = ["Verified information:" ]
-        for s in sources[:4]:
-            lines.append(f"- {s.title}: {s.text.splitlines()[0][:140]}")
-        lines.append("Ask a follow-up to refine location or crop if needed.")
-        return "\n".join(lines)
+    async def _execute_search_fpo(self, village: Optional[str], state: str) -> ToolResult:
+        """Execute FPO search tool with enhanced geocoding."""
+        try:
+            svc = FPOService()
+            
+            if village:
+                # Try enhanced geocoding with dual maps API first, fallback to weather APIs
+                result = await geocode_dual_api(f"{village}, {state}")
+                if result:
+                    geo = {'lat': result.lat, 'lon': result.lon}
+                else:
+                    # Fallback to weather API geocoding
+                    geo = await ws.geocode_openweather(village, state) or await ws.geocode_visual_crossing(village, state)
+                
+                if geo:
+                    # Find nearest FPOs in the same state using enhanced distance calculation
+                    state_fpos = [f for f in svc.fpos if f.state.lower() == state.lower() and not (f.lat == 0.0 and f.lon == 0.0)]
+                    def dist(f):
+                        return svc.calculate_distance(geo['lat'], geo['lon'], f.lat, f.lon)
+                    nearest = sorted(((f, dist(f)) for f in state_fpos), key=lambda x: x[1])[:5]
+                    
+                    if nearest:
+                        fpos = []
+                        for f, distance in nearest:
+                            fpos.append({
+                                "name": f.name,
+                                "district": f.district,
+                                "state": f.state,
+                                "distance_km": f"{distance:.1f}",
+                                "coordinates": f"({f.lat:.4f}, {f.lon:.4f})" if (f.lat != 0.0 or f.lon != 0.0) else "N/A"
+                            })
+                        return ToolResult("search_fpo", True, {"fpos": fpos, "type": "nearest", "location": f"{village}, {state}"})
+            
+            # Fallback: list FPOs by state
+            state_fpos = [f for f in svc.fpos if f.state.lower() == state.lower()][:5]
+            fpos = []
+            for f in state_fpos:
+                fpos.append({
+                    "name": f.name,
+                    "district": f.district,
+                    "state": f.state,
+                    "coordinates": f"({f.lat:.4f}, {f.lon:.4f})" if (f.lat != 0.0 or f.lon != 0.0) else "N/A"
+                })
+                
+            if not fpos:
+                return ToolResult("search_fpo", True, {
+                    "fpos": [],
+                    "message": f"No FPO data available for {state}",
+                    "type": "state_search"
+                })
+                
+            return ToolResult("search_fpo", True, {"fpos": fpos, "type": "state", "state": state})
+            
+        except Exception as e:
+            return ToolResult("search_fpo", False, None, str(e))
+
+    def _execute_get_advisory(self, query: str) -> ToolResult:
+        """Execute RAG-based advisory tool."""
+        try:
+            docs = self.rag.query(query, k=5)
+            if not docs:
+                return ToolResult("get_advisory", True, {
+                    "advice": [],
+                    "message": "No specific advisory found for your query"
+                })
+                
+            advice = []
+            for doc in docs:
+                advice.append({
+                    "title": doc.get('heading') or doc.get('source') or 'Agricultural Advisory',
+                    "content": doc['text'][:500] + "..." if len(doc['text']) > 500 else doc['text'],
+                    "source": doc.get('source', 'ICAR Guidelines')
+                })
+                
+            return ToolResult("get_advisory", True, {"advice": advice})
+            
+        except Exception as e:
+            return ToolResult("get_advisory", False, None, str(e))
+
+    async def run(self, query: str, village: Optional[str] = None, state: Optional[str] = None) -> str:
+        """Main entry point - analyze query and execute appropriate tools."""
+        
+        # Extract intent and location using Gemini
+        parsed = self._extract_intent_and_location(query)
+        
+        # Override with provided location if available
+        location_village = parsed.get("location", {}).get("village") or village
+        location_state = parsed.get("location", {}).get("state") or state
+        intent = parsed.get("intent", "other")
+        shop_type = parsed.get("shop_type")
+        
+        # Execute appropriate tools based on intent
+        tool_results = []
+        
+        try:
+            if intent == "weather" and location_village and location_state:
+                result = await self._execute_get_weather(location_village, location_state)
+                tool_results.append(result)
+                
+            elif intent == "shop" and location_village and location_state and shop_type:
+                result = await self._execute_search_shops(shop_type, location_village, location_state)
+                tool_results.append(result)
+                
+            elif intent == "kvk" and location_village and location_state:
+                result = await self._execute_search_kvk(location_village, location_state)
+                tool_results.append(result)
+                
+            elif intent == "fpo" and location_state:
+                result = await self._execute_search_fpo(location_village, location_state)
+                tool_results.append(result)
+                
+            elif intent == "advisory":
+                result = self._execute_get_advisory(query)
+                tool_results.append(result)
+                
+            else:
+                # Default: try to get advisory for any agricultural query
+                result = self._execute_get_advisory(query)
+                tool_results.append(result)
+                
+        except Exception as e:
+            return f"Error processing your request: {str(e)}"
+            
+        # Use Gemini to compose final response from tool results
+        return self._compose_response(query, tool_results, parsed)
+        
+    def _compose_response(self, query: str, tool_results: List[ToolResult], parsed: Dict) -> str:
+        """Use Gemini to compose a natural response from tool results."""
+        
+        # Build context from tool results
+        context_parts = []
+        for result in tool_results:
+            if result.success and result.data:
+                context_parts.append(f"Tool: {result.tool_name}\nResult: {json.dumps(result.data, indent=2)}")
+            elif not result.success:
+                context_parts.append(f"Tool: {result.tool_name}\nError: {result.error}")
+                
+        if not context_parts:
+            return "I don't have enough information to answer your question. Please provide more details about your location or specify what you're looking for."
+            
+        context = "\n\n".join(context_parts)
+        
+        prompt = f"""You are a helpful agricultural assistant. Based on the tool results below, provide a natural, conversational response to the user's question.
+
+User Question: {query}
+
+Tool Results:
+{context}
+
+Instructions:
+- Be conversational and helpful
+- Include specific details from the tool results (distances, names, addresses)
+- If location services found nearby facilities, mention them specifically
+- If weather data is available, include relevant agricultural advice
+- If no results were found, suggest alternatives or ask for clarification
+- Keep the response focused and practical for farmers
+
+Response:"""
+
+        try:
+            response = self.model.generate_content(prompt)
+            text = getattr(response, 'text', '') or ''
+            return text.strip() if text.strip() else "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
+        except Exception:
+            # Fallback: simple formatting
+            lines = [f"Here's what I found for your query:"]
+            for result in tool_results:
+                if result.success and result.data:
+                    if result.tool_name == "get_weather":
+                        data = result.data
+                        lines.append(f"Weather: {data.get('temperature', 'N/A')}, {data.get('humidity', 'N/A')}")
+                    elif result.tool_name == "search_shops":
+                        shops = result.data.get('shops', [])
+                        if shops:
+                            lines.append(f"Found {len(shops)} {result.data.get('type', 'shops')}:")
+                            for shop in shops[:3]:
+                                lines.append(f"- {shop['name']} ({shop['distance_km']} km)")
+                        else:
+                            lines.append(result.data.get('message', 'No shops found'))
+                    elif result.tool_name == "search_kvk":
+                        kvks = result.data.get('kvks', [])
+                        if kvks:
+                            lines.append(f"Found {len(kvks)} KVK centers:")
+                            for kvk in kvks[:3]:
+                                lines.append(f"- {kvk['name']} ({kvk['distance_km']} km)")
+                        else:
+                            lines.append(result.data.get('message', 'No KVK found'))
+                    elif result.tool_name == "search_fpo":
+                        fpos = result.data.get('fpos', [])
+                        if fpos:
+                            lines.append(f"Found {len(fpos)} FPOs:")
+                            for fpo in fpos[:3]:
+                                lines.append(f"- {fpo['name']} - {fpo['district']}")
+                        else:
+                            lines.append(result.data.get('message', 'No FPOs found'))
+                    elif result.tool_name == "get_advisory":
+                        advice = result.data.get('advice', [])
+                        if advice:
+                            lines.append("Agricultural Advisory:")
+                            lines.append(advice[0]['content'][:200] + "...")
+                        else:
+                            lines.append(result.data.get('message', 'No specific advisory available'))
+                elif not result.success:
+                    lines.append(f"Error with {result.tool_name}: {result.error}")
+                    
+            return "\n".join(lines)
+
+

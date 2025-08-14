@@ -107,6 +107,35 @@ async def geocode_visual_crossing(village: str, state: str) -> Optional[Dict[str
         logger.warning(f"Visual Crossing geocoding fallback failed: {e}")
     return None
 
+async def geocode_freeform(location: str) -> Optional[Dict[str, Any]]:
+    """Geocode a free-form location string via Visual Crossing timeline endpoint.
+
+    Attempts to parse state from 'resolvedAddress' field when possible.
+    """
+    key = os.getenv("VISUAL_CROSSING_API_KEY")
+    if not key:
+        return None
+    try:
+        loc = location.strip()
+        url = f"{VISUAL_CROSSING_URL}/{loc}"
+        params = {"key": key, "contentType": "json", "include": "days", "elements": "temp"}
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+        lat = data.get('latitude')
+        lon = data.get('longitude')
+        resolved = (data.get('resolvedAddress') or '').split(',')
+        resolved = [p.strip() for p in resolved if p and p.strip()]
+        name = resolved[0] if resolved else loc.title()
+        # Heuristic: last is country, second last is state if present
+        state = resolved[-2] if len(resolved) >= 2 else ''
+        if lat is not None and lon is not None:
+            return {"name": name, "lat": lat, "lon": lon, "state": state}
+    except Exception as e:
+        logger.warning(f"Free-form geocoding failed: {e}")
+    return None
+
 async def get_openweather_data(lat: float, lon: float) -> Optional[Dict[str, Any]]:
     """Get weather data from OpenWeatherMap."""
     if not OPENWEATHER_API_KEY:

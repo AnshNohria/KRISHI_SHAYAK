@@ -59,20 +59,19 @@ def _cache_get(key):
 def _cache_set(key, data):
     _CACHE[key] = (time.time(), data)
 
-"""Keyword to Geoapify category mapping.
+"""Text search variants for agricultural inputs.
 
-Geoapify categories reference: https://apidocs.geoapify.com/docs/places/#categories
-We approximate agricultural inputs with a combination of commercial/agricultural,
-shop/garden, shop/agrarian, and service/misc where relevant.
+Per Geoapify Places quick-start, text= is robust and category taxonomy for
+agri inputs is inconsistent. We'll rely on text search with multiple variants
+instead of fragile categories that often return 400.
 """
-_KEYWORD_CATEGORIES = {
-    # Candidate categories; some may be ignored or cause 400; we will retry individually.
-    'fertilizer shop': ['commercial.agricultural', 'shop.farm', 'shop.garden'],
-    'seed shop': ['commercial.agricultural', 'shop.farm'],
-    'pesticide shop': ['commercial.agricultural', 'shop.farm'],
-    'farm machinery dealer': ['commercial.agricultural'],
-    'tractor dealer': ['commercial.agricultural'],
-    'agricultural supply store': ['commercial.agricultural', 'shop.farm']
+_KEYWORD_TEXT_VARIANTS = {
+    'fertilizer shop': ['fertilizer shop', 'fertiliser shop', 'agro dealer', 'agri input dealer', 'agro chemical', 'agriculture supply'],
+    'seed shop': ['seed shop', 'seed store', 'seed dealer', 'agri input dealer'],
+    'pesticide shop': ['pesticide shop', 'agro chemical', 'agro dealer', 'agri input dealer'],
+    'farm machinery dealer': ['farm machinery dealer', 'agriculture machinery', 'tractor dealer'],
+    'tractor dealer': ['tractor dealer', 'tractor showroom'],
+    'agricultural supply store': ['agricultural supply', 'agriculture supply', 'agri input dealer']
 }
 
 def _sanitize_categories(cats):
@@ -106,7 +105,7 @@ def _haversine(lat1, lon1, lat2, lon2):
 
 async def search_agri_shops(keyword: str, lat: float, lon: float, api_key: str,
                             radius_m: int = 20000, max_results: int = 5,
-                            fallback_radius_m: int = 50000) -> List[Dict[str, Any]]:
+                            fallback_radius_m: int = 100000) -> Tuple[List[Dict[str, Any]], int]:
     """Search nearby agricultural shops using Geoapify Places.
 
     Args:
@@ -115,119 +114,119 @@ async def search_agri_shops(keyword: str, lat: float, lon: float, api_key: str,
         api_key: Geoapify API key.
         radius_m: initial search radius (meters).
         max_results: maximum number of results.
-    Returns: list of dicts with name, address, distance_km, rating (None), maps_url.
+    Returns: (results, used_radius_m)
+      - results: list of dicts with name, address, distance_km, rating (None), maps_url.
+      - used_radius_m: last radius attempted in meters.
     """
-    categories = _KEYWORD_CATEGORIES.get(keyword, ['commercial.agricultural'])
-    categories = _sanitize_categories(categories)
-    # Geoapify radius cap: keep within fallback_radius_m
-    use_radius = min(radius_m, fallback_radius_m)
-    cat_param = ','.join(categories)
-    cache_key = (cat_param, round(lat,4), round(lon,4), use_radius)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    base_params = {
-        'filter': f"circle:{lon},{lat},{use_radius}",
-        'bias': f"proximity:{lon},{lat}",
-        'limit': max_results,
-        'apiKey': api_key,
-    }
-    out: List[Dict[str, Any]] = []
-    if not _rate_allow(api_key, cat_param):  # rate limited path
-        return [{
-            'name': 'Rate limit reached (local safeguard)',
-            'address': f'Max {_RATE_MAX} calls / {_RATE_WINDOW}s for these categories',
-            'distance_km': 0.0,
-            'rating': None,
-            'maps_url': f"https://www.openstreetmap.org/search?query={keyword.replace(' ', '+')}"
-        }]
+    # Build radius attempts (progressively widen up to cap)
+    first = max(1000, int(radius_m))
+    cap = max(first, int(fallback_radius_m))
+    radii = []
+    r = first
+    while True:
+        radii.append(r)
+        if r >= cap:
+            break
+        r = min(cap, int(r * 2))
+
+    # Prepare alternative keyword attempts for agri inputs
+    kwl = keyword.lower().strip()
+    alt_keywords = [kwl]
+    if 'fertilizer' in kwl:
+        alt_keywords += ['seed shop', 'pesticide shop']
+    elif 'seed' in kwl:
+        alt_keywords += ['fertilizer shop', 'pesticide shop']
+    elif 'pesticide' in kwl:
+        alt_keywords += ['fertilizer shop', 'seed shop']
+
+    last_radius_used = radii[-1]
     try:
         async with httpx.AsyncClient() as client:
-            # 1. Text search first (resilient to category taxonomy mismatch)
-            text_params = base_params.copy()
-            text_params['text'] = keyword
-            try:
-                data = await _fetch_json(client, GEOAPIFY_PLACES_URL, text_params)
-            except httpx.HTTPStatusError as e_text:
-                # If even text fails, fall back to category attempts
-                data = {'features': []}
-            features = data.get('features', [])
-            if not features:
-                # 2. Category batch attempt
-                cat_params = base_params.copy()
-                cat_params['categories'] = cat_param
-                try:
-                    data_cat = await _fetch_json(client, GEOAPIFY_PLACES_URL, cat_params)
-                    features = data_cat.get('features', [])
-                except httpx.HTTPStatusError as e_cat:
-                    if e_cat.response.status_code == 400:
-                        # 3. Individual category retries
-                        combined: List[Dict[str, Any]] = []
-                        for single in categories:
-                            single_params = base_params.copy()
-                            single_params['categories'] = single
-                            try:
-                                d_single = await _fetch_json(client, GEOAPIFY_PLACES_URL, single_params)
-                                combined.extend(d_single.get('features', []))
-                            except httpx.HTTPStatusError:
-                                continue
-                        features = combined
-                    else:
-                        raise
-            if not features:
-                # 4. Overpass fallback (OSM direct) if still empty
-                osm = await _overpass_fallback(lat, lon, use_radius, max_results, keyword)
-                if osm:
-                    _cache_set(cache_key, osm)
-                    return osm
-        if not features:
-            return []
-        if not features:
-            return []
-        for feat in features:
-            props = feat.get('properties', {})
-            glat = props.get('lat') or feat.get('geometry', {}).get('coordinates', [None, None])[1]
-            glon = props.get('lon') or feat.get('geometry', {}).get('coordinates', [None, None])[0]
-            if glat is None or glon is None:
-                continue
-            dist = _haversine(lat, lon, glat, glon)
-            address_parts = [
-                props.get('name'),
-                props.get('street'),
-                props.get('housenumber'),
-                props.get('district'),
-                props.get('city'),
-                props.get('state'),
-            ]
-            address = ', '.join([str(p) for p in address_parts if p])
-            maps_url = f"https://www.openstreetmap.org/?mlat={glat}&mlon={glon}#map=16/{glat}/{glon}"
-            out.append({
-                'name': props.get('name') or keyword.title(),
-                'address': address,
-                'distance_km': dist,
-                'rating': None,
-                'maps_url': maps_url,
-                'lat': glat,
-                'lon': glon,
-            })
-        out.sort(key=lambda r: r['distance_km'])
-        _cache_set(cache_key, out)
-        return out[:max_results]
+            for use_radius in radii:
+                for kw_try in alt_keywords:
+                    # Cache by keyword+radius
+                    cache_key = (kw_try, round(lat,4), round(lon,4), use_radius)
+                    cached = _cache_get(cache_key)
+                    if cached is not None:
+                        return cached[:max_results], use_radius
+                    base_params = {
+                        'filter': f"circle:{lon},{lat},{use_radius}",
+                        'bias': f"proximity:{lon},{lat}",
+                        'limit': max_results,
+                        'apiKey': api_key,
+                        'categories': 'commercial',
+                    }
+                    out: List[Dict[str, Any]] = []
+                    # Light local rate guard (per kw)
+                    if not _rate_allow(api_key, kw_try):
+                        return ([{
+                            'name': 'Rate limit reached (local safeguard)',
+                            'address': f'Max ' + str(_RATE_MAX) + f" calls / {_RATE_WINDOW}s",
+                            'distance_km': 0.0,
+                            'rating': None,
+                            'maps_url': f"https://www.openstreetmap.org/search?query={kw_try.replace(' ', '+')}"
+                        }], use_radius)
+                    # 1. Text search (primary per docs)
+                    text_params = base_params.copy()
+                    text_params['text'] = kw_try
+                    try:
+                        data = await _fetch_json(client, GEOAPIFY_PLACES_URL, text_params)
+                    except httpx.HTTPStatusError:
+                        data = {'features': []}
+                    features = data.get('features', [])
+                    if not features:
+                        last_radius_used = use_radius
+                        continue
+                    for feat in features:
+                        props = feat.get('properties', {})
+                        glat = props.get('lat') or feat.get('geometry', {}).get('coordinates', [None, None])[1]
+                        glon = props.get('lon') or feat.get('geometry', {}).get('coordinates', [None, None])[0]
+                        if glat is None or glon is None:
+                            continue
+                        dist = _haversine(lat, lon, glat, glon)
+                        address_parts = [
+                            props.get('name'),
+                            props.get('street'),
+                            props.get('housenumber'),
+                            props.get('district'),
+                            props.get('city'),
+                            props.get('state'),
+                        ]
+                        address = ', '.join([str(p) for p in address_parts if p])
+                        maps_url = f"https://www.openstreetmap.org/?mlat={glat}&mlon={glon}#map=16/{glat}/{glon}"
+                        out.append({
+                            'name': props.get('name') or kw_try.title(),
+                            'address': address,
+                            'distance_km': dist,
+                            'rating': None,
+                            'maps_url': maps_url,
+                            'lat': glat,
+                            'lon': glon,
+                        })
+                    if out:
+                        out.sort(key=lambda r: r['distance_km'])
+                        _cache_set(cache_key, out)
+                        return out[:max_results], use_radius
+                    last_radius_used = use_radius
+        # If still nothing, try OSM fallback once with the last radius
+        osm = await _overpass_fallback(lat, lon, last_radius_used, max_results, keyword)
+        if osm:
+            return osm, last_radius_used
+        return [], last_radius_used
     except Exception as e:  # pragma: no cover - network failure path
-        # Attempt Overpass as last-ditch fallback
         try:
-            osm = await _overpass_fallback(lat, lon, use_radius, max_results, keyword)
+            osm = await _overpass_fallback(lat, lon, last_radius_used, max_results, keyword)
             if osm:
-                return osm
+                return osm, last_radius_used
         except Exception:
             pass
-        return [{
+        return ([{
             'name': 'Geoapify request failed',
             'address': str(e),
             'distance_km': 0.0,
             'rating': None,
             'maps_url': f"https://www.openstreetmap.org/search?query={keyword.replace(' ','+')}"
-        }]
+        }], last_radius_used)
 
 async def _overpass_fallback(lat: float, lon: float, radius_m: int, max_results: int, keyword: str) -> List[Dict[str, Any]]:
     """Query Overpass API for agricultural-related shops if Geoapify yields nothing.
@@ -283,10 +282,10 @@ async def _overpass_fallback(lat: float, lon: float, radius_m: int, max_results:
 
 async def search_agri_shops_nl(query: str, lat: float, lon: float, api_key: str,
                                radius_m: int = 20000, max_results: int = 5,
-                               fallback_radius_m: int = 50000) -> List[Dict[str, Any]]:
+                               fallback_radius_m: int = 100000) -> Tuple[List[Dict[str, Any]], int]:
     """Natural language shop search using text-first, then category, then OSM fallback."""
     normalized = query.lower().strip()
-    for k in _KEYWORD_CATEGORIES:
+    for k in _KEYWORD_TEXT_VARIANTS:
         if k in normalized:
             keyword = k
             break
@@ -296,60 +295,76 @@ async def search_agri_shops_nl(query: str, lat: float, lon: float, api_key: str,
     return await search_agri_shops(keyword, lat, lon, api_key, radius_m=radius_m, max_results=max_results, fallback_radius_m=fallback_radius_m)
 
 __all__ = ['search_agri_shops', 'search_agri_shops_nl']
-async def search_kvk(lat: float, lon: float, api_key: str, radius_m: int = 50000, limit: int = 3) -> List[Dict[str, Any]]:
+async def search_kvk(lat: float, lon: float, api_key: str, radius_m: int = 50000, limit: int = 3,
+                     fallback_radius_m: int = 150000) -> Tuple[List[Dict[str, Any]], int]:
     """Search for Krishi Vigyan Kendra (KVK) near a location using Geoapify.
 
     Strategy: text search 'Krishi Vigyan Kendra' biased to user location.
     Falls back to empty list if key missing or request fails.
     """
     if not api_key:
-        return []
-    cache_key = ("kvk", round(lat,4), round(lon,4), radius_m)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    params = {
-        'text': 'Krishi Vigyan Kendra',
-        'filter': f"circle:{lon},{lat},{radius_m}",
-        'bias': f"proximity:{lon},{lat}",
-        'limit': limit,
-        'apiKey': api_key
-    }
+        return [], radius_m
+    first = max(5000, int(radius_m))
+    cap = max(first, int(fallback_radius_m))
+    radii = []
+    r = first
+    while True:
+        radii.append(r)
+        if r >= cap:
+            break
+        r = min(cap, int(r * 2))
+    last_radius_used = radii[-1]
     try:
         async with httpx.AsyncClient() as client:
-            data = await _fetch_json(client, GEOAPIFY_PLACES_URL, params)
-        feats = data.get('features', [])
-        out: List[Dict[str, Any]] = []
-        for feat in feats:
-            props = feat.get('properties', {})
-            glat = props.get('lat') or feat.get('geometry', {}).get('coordinates', [None, None])[1]
-            glon = props.get('lon') or feat.get('geometry', {}).get('coordinates', [None, None])[0]
-            if glat is None or glon is None:
-                continue
-            dist = _haversine(lat, lon, glat, glon)
-            address_parts = [
-                props.get('name'),
-                props.get('housenumber'),
-                props.get('street'),
-                props.get('district'),
-                props.get('city'),
-                props.get('state'),
-                props.get('postcode')
-            ]
-            address = ', '.join([str(p) for p in address_parts if p])
-            maps_url = f"https://www.openstreetmap.org/?mlat={glat}&mlon={glon}#map=16/{glat}/{glon}"
-            out.append({
-                'name': props.get('name') or 'Krishi Vigyan Kendra',
-                'address': address,
-                'distance_km': dist,
-                'lat': glat,
-                'lon': glon,
-                'maps_url': maps_url
-            })
-        out.sort(key=lambda r: r['distance_km'])
-        _cache_set(cache_key, out)
-        return out
+            for use_radius in radii:
+                cache_key = ("kvk", round(lat,4), round(lon,4), use_radius)
+                cached = _cache_get(cache_key)
+                if cached is not None:
+                    return cached, use_radius
+                params = {
+                    'text': 'Krishi Vigyan Kendra',
+                    'filter': f"circle:{lon},{lat},{use_radius}",
+                    'bias': f"proximity:{lon},{lat}",
+                    'limit': limit,
+                    'apiKey': api_key,
+                    'categories': 'education'
+                }
+                data = await _fetch_json(client, GEOAPIFY_PLACES_URL, params)
+                feats = data.get('features', [])
+                out: List[Dict[str, Any]] = []
+                for feat in feats:
+                    props = feat.get('properties', {})
+                    glat = props.get('lat') or feat.get('geometry', {}).get('coordinates', [None, None])[1]
+                    glon = props.get('lon') or feat.get('geometry', {}).get('coordinates', [None, None])[0]
+                    if glat is None or glon is None:
+                        continue
+                    dist = _haversine(lat, lon, glat, glon)
+                    address_parts = [
+                        props.get('name'),
+                        props.get('housenumber'),
+                        props.get('street'),
+                        props.get('district'),
+                        props.get('city'),
+                        props.get('state'),
+                        props.get('postcode')
+                    ]
+                    address = ', '.join([str(p) for p in address_parts if p])
+                    maps_url = f"https://www.openstreetmap.org/?mlat={glat}&mlon={glon}#map=16/{glat}/{glon}"
+                    out.append({
+                        'name': props.get('name') or 'Krishi Vigyan Kendra',
+                        'address': address,
+                        'distance_km': dist,
+                        'lat': glat,
+                        'lon': glon,
+                        'maps_url': maps_url
+                    })
+                if out:
+                    out.sort(key=lambda r: r['distance_km'])
+                    _cache_set(cache_key, out)
+                    return out, use_radius
+                last_radius_used = use_radius
+        return [], last_radius_used
     except Exception:
-        return []
+        return [], last_radius_used
 
 __all__.append('search_kvk')
