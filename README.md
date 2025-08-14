@@ -1,202 +1,56 @@
-# 🌾 Krishi Dhan Sahayak - Agricultural Terminal Chatbot
+# Krishi Dhan Sahayak (Minimal Agent‑First)
 
-A simple, reliable terminal-based agricultural assistant that helps farmers with comprehensive agricultural guidance through an easy-to-use command-line interface.
+A lean, terminal-based agriculture assistant. All queries route through an agent that uses tools only (Weather, Maps, FPO, RAG). Answers are strictly data-backed. If the topic isn’t farming or there isn’t enough verified data, it says so.
 
-## 🌟 Features
+## Quick start (Windows PowerShell)
 
-### 1. **Pure Python Terminal Chatbot** (chatbot.py)
-- Simple, dependency-free agricultural assistant
-- Beautiful terminal interface with emojis and formatting
-- Bilingual support (Hindi/English)
-- Agricultural query filtering to ensure relevant responses
-- Comprehensive knowledge base covering all farming aspects
-
-### 2. **Agricultural Knowledge Areas**
--- **🌤️ Weather Guidance**: Live & advisory
--- **🏛️ FPO Information**: Nearby & services
--- **🗺️ Input Dealer Lookup**: Fertilizer / seed / pesticide / machinery (Google Maps)
--- **🌱 Crop Management**: Seasonal crop calendar
--- **🐛 Pest Control**: Natural & chemical
--- **💧 Irrigation**: Water use efficiency
--- **🧪 Fertilizers**: Balanced nutrition
-
-### 3. **User-Friendly Interface**
-- Clean terminal design with clear sections
-- Interactive commands (help, clear, quit)
-- Real-time processing indicators
-- Error handling and user guidance
-
-## 🚀 Quick Start
-
-### **Simple Setup (No Dependencies)**
-```bash
-python chatbot.py
-```
-
-### **Enhanced Setup (With Rich Interface)**
-```bash
-pip install rich colorama
-python chatbot.py
-```
-
-### **Full Setup (All Features)**
-```bash
+```powershell
+# 1) Create venv and install
+python -m venv .venv
+& .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python chatbot.py
+
+# 2) Optional: set API keys
+$env:OPENWEATHER_API_KEY = "..."
+$env:VISUAL_CROSSING_API_KEY = "..."
+$env:GEOAPIFY_API_KEY = "..."       # shops/KVK
+$env:GEMINI_API_KEY = "..."         # lets the agent summarize sources
+
+# 3) Run
+& .\.venv\Scripts\python.exe .\chatbot.py
 ```
 
-**Option 2: Direct AI Chatbot**
-```bash
-python chat.py
+## What it can do
+- Weather advisory (OpenWeather + Visual Crossing)
+- Nearby shops and KVK via Maps
+- FPO lookup (nearest or by state)
+- Advisory answers using RAG over ICAR PDFs (Chroma; optional)
+- Strict: Only uses gathered sources; won’t hallucinate
+
+## Project layout
+```
+ai/         # Gemini agent orchestrator (tools + composition)
+chatbot.py  # Terminal entry; routes to agent
+core/       # Profile (last location), config helpers
+fpo/        # FPO dataset + service
+maps/       # Maps/places helpers (shops, KVK)
+rag/        # Chroma ingest/retrieve (optional; degrades gracefully)
+weather/    # Geocoding + weather + advice
+tests/      # Basic tests
 ```
 
-**Option 3: Integrated Interface**
-```bash
-python main.py
+## Notes
+- Chroma on Windows: use Docker HTTP server or local PersistentClient (requirements include chromadb 1.0.x).
+- ICAR PDFs: put under `PDFs/` and run ingestion when needed; app still runs without RAG.
+- If `GEMINI_API_KEY` isn’t set, the agent returns stitched summaries from the retrieved sources.
+
+## Run tests
+```powershell
+& .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-## 📁 Project Structure
-
-```
-Krishi_Dhan_Sahayak/
-├── app.py                 # Main menu application
-├── chat.py               # AI chatbot launcher
-├── main.py               # Integrated interface
-├── .env                  # API keys configuration
-├── List Of FPOs.pdf      # Official FPO database (to be processed)
-├── README.md             # This documentation
-│
-├── core/                 # Core utilities
-│   └── __init__.py       # Common imports and utilities
-│
-├── weather/              # Weather intelligence module
-│   ├── __init__.py
-│   └── service.py        # Dual API weather service
-│
-├── fpo/                  # FPO database and search
-│   ├── __init__.py
-│   └── service.py        # FPO service with comprehensive database
-│
-└── chatbot/              # AI chatbot system
-    ├── __init__.py
-    └── service.py        # Gemini AI integration with context
-```
-
-## 🎯 Usage Examples
-
-### Weather Query
-```
-Query: "Weather for Ludhiana, Punjab"
-Response: Current weather conditions with agricultural advice
-```
-
-### FPO Search
-```
-Query: "Find FPO near Pune, Maharashtra"
-Response: List of nearby FPOs with contact details and services
-```
-
-### AI Assistant
-```
-Query: "Best crops for monsoon season in Maharashtra"
-Response: AI-powered agricultural advice with local context
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-- `OPENWEATHER_API_KEY`: OpenWeatherMap API key for weather data
-- `VISUAL_CROSSING_API_KEY`: Visual Crossing API key (backup weather)
-- `GEMINI_API_KEY`: Google Gemini API key for AI chatbot
-
-### Modular Design
-Each module is independent and can be used separately:
-- Weather module: Works without FPO data
-- FPO module: Works without weather APIs
-- Chatbot: Enhanced with both modules but works standalone
-
-## 📊 FPO Database
-
-Currently contains **35+ FPOs** across major Indian states:
-- Punjab, Haryana, Uttar Pradesh
-- Maharashtra, Gujarat, Rajasthan
-- Tamil Nadu, Karnataka, Kerala
-- West Bengal, Odisha, Assam
-- Madhya Pradesh, Chhattisgarh, Bihar
-- And more...
-
-**Note**: The database should be updated with official FPO data from `List Of FPOs.pdf`.
-
-## 🛠️ Technical Features
-
-### Dual API Weather System
-- Primary: OpenWeatherMap (reliable, widely used)
-- Backup: Visual Crossing (comprehensive data)
-- Automatic fallback on API failures
-- Agricultural advice generation
-
-### AI Integration
-- Google Gemini AI for natural language processing
-- Context-aware responses using local weather and FPO data
-- Rich formatting for better user experience
-- Error handling and graceful degradation
-
-### Location Intelligence
-- GPS coordinate-based FPO search
-- Distance calculation using Haversine formula
-- Location parsing for weather queries
-- State and district-wise FPO organization
-
-## 🎨 User Interface
-
-### Rich Terminal Interface
-- Colorful and formatted output using Rich library
-- Progress indicators and status messages
-- Error messages with helpful guidance
-- Cross-platform color support with Colorama
-
-### Menu System
-- Numbered options for easy navigation
-- API status checking
-- Graceful handling of missing dependencies
-- Clear instructions and feedback
-
-## 🔄 Future Enhancements
-
-1. **PDF Processing**: Implement PDF reader to update FPO database from `List Of FPOs.pdf`
-2. **Database Integration**: Move from in-memory storage to SQLite/PostgreSQL
-3. **Web Interface**: Create web-based dashboard using FastAPI
-4. **Mobile App**: Develop mobile application for farmers
-5. **Multilingual Support**: Add regional language support
-6. **Crop Calendar**: Integrate crop calendar and seasonal advice
-7. **Market Prices**: Add commodity price information
-8. **Government Schemes**: Include information about agricultural schemes
-
-## 🧪 Testing
-
-### Manual Testing
-```bash
-# Test weather service
-python -c "from weather.service import WeatherService; ws = WeatherService(); print(ws.get_weather('Delhi'))"
-
-# Test FPO service
-python -c "from fpo.service import FPOService; fs = FPOService(); print(fs.find_nearest_fpos('Delhi', limit=3))"
-
-# Test AI service (requires API key)
-python -c "from chatbot.service import KrishiChatbot; bot = KrishiChatbot(); print(bot.get_response('Hello'))"
-```
-
-### Error Handling
-- API key validation
-- Network connectivity checks
-- Graceful degradation when services are unavailable
-- User-friendly error messages
-
-## 📄 License
-
-This project is developed for educational and agricultural support purposes.
-
-## 🤝 Contributing
+## License
+For educational and agricultural support purposes.
 
 1. Fork the repository
 2. Create feature branch (`git checkout -b feature/amazing-feature`)
