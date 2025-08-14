@@ -1,0 +1,23 @@
+__pycache__/
+.env
+*.pyc
+.idea/
+.vscode/
+PDFs/
+
+# Local Python env
+.venv/
+.pytest_cache/
+
+# OS/editor noise
+.DS_Store
+
+# Vector store and RAG artifacts
+data/vector/
+data/**/icar_manifest.json
+
+# Runtime artifacts
+user_profile.json
+
+# Temp downloads (ingestion cache)
+data/vector/icar_store/downloads/
