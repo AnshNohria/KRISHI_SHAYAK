@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+*.pyo
+*.pyd
 *.so
 .Python
 build/
@@ -41,29 +44,53 @@ venv.bak/
 # Logs
 *.log
 logs/
+error.log
+debug.log
 
 # Database
 *.db
 *.sqlite3
 
-# ChromaDB
+# ChromaDB and Vector Store
 chroma_db/
+data/vector/
+data/**/icar_manifest.json
 
 # Temporary files
 *.tmp
 *.temp
+*.cache
+*.session
 temp/
 tmp/
+PDFs/
 
 # Test files
 test_*.py
 *_test.py
+.pytest_cache/
+tests/
 query_results.txt
 processed_schemes.json
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime artifacts
+user_profile.json
+
+# Temp downloads (ingestion cache)
+data/vector/icar_store/downloads/
+
+# Demo and experimental files
+demo_*.py
+experiment_*.py
+temp_*.py
+debug/
+
+# Scripts directory (development utilities)
+scripts/
 
 # Configuration (uncomment if you want to keep config private)
 # config.py

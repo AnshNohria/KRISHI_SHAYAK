@@ -1,196 +1,181 @@
-# 🌾 Modern Agriculture Schemes Chatbot
+# 🌾 Krishi Dhan Sahayak - AI-Powered Agriculture Assistant
 
-A clean, modular chatbot architecture for helping farmers find relevant government agriculture schemes in India. Built with tool-based architecture for easy extensibility.
+A comprehensive, AI-driven agricultural assistant that helps Indian farmers with intelligent guidance, weather information, FPO connections, and government scheme access. Built with modern tool-based architecture for reliability and extensibility.
+
+## 🚀 Quick Start (Windows PowerShell)
+
+```powershell
+# 1) Create virtual environment and install dependencies
+python -m venv .venv
+& .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 2) Set up API keys (copy .env.example to .env and add your keys)
+$env:OPENWEATHER_API_KEY = "..."         # Weather data
+$env:VISUAL_CROSSING_API_KEY = "..."     # Weather fallback
+$env:GEOAPIFY_API_KEY = "..."            # Maps/shops/KVK
+$env:LocationIQ_API_KEY = "..."          # Primary geocoding
+$env:GEMINI_API_KEY = "..."              # AI agent
+
+# 3) Run the chatbot
+& .\.venv\Scripts\python.exe .\chatbot.py
+```
 
 ## 🏗️ Architecture Overview
 
+### Modern Tool-Based Agent System
+- **AI Agent**: Routes all queries through intelligent tool selection
+- **Multi-Tool Integration**: Weather, Maps, FPO, RAG, KVK search
+- **Fallback Systems**: Multiple API providers for reliability
+- **Data-Driven**: All responses backed by verified data sources
+
 ### Core Components
 
-1. **Data Processor** (`data_processor.py`)
-   - Loads and processes Excel data with 534+ agriculture schemes
-   - Cleans and structures scheme information
-   - Extracts key fields: title, benefits, eligibility, application process, etc.
+1. **AI Agent** (`ai/agent.py` & `ai/function_agent.py`)
+   - Intelligent query routing and tool selection
+   - Context-aware conversation handling
+   - Gemini-powered natural language understanding
 
-2. **Vector Database** (`database.py`)
-   - Uses ChromaDB for semantic search capabilities
-   - Stores scheme data as searchable vectors
-   - Supports filtering by state, category, ministry
+2. **Weather Service** (`weather/service.py`)
+   - Dual API support (OpenWeatherMap + Visual Crossing)
+   - Comprehensive geocoding with LocationIQ primary + Geoapify fallback
+   - Farmer-specific weather insights
 
-3. **Tool Interface** (`tool_interface.py`)
-   - Abstract base class for all tools
-   - Tool Manager for orchestrating multiple tools
-   - Automatic tool selection based on query relevance
+3. **Maps & Location Services** (`maps/`)
+   - Agricultural shop search
+   - Krishi Vigyan Kendra (KVK) finder
+   - Dual API architecture (Geoapify + Foursquare)
 
-4. **Scheme Search Tool** (`scheme_search_tool.py`)
-   - Implements the tool interface
-   - Intelligent query optimization
-   - Formatted, farmer-friendly responses
+4. **FPO Service** (`fpo/service.py`)
+   - 2,947 Farmer Producer Organizations database
+   - Distance-based nearest FPO search
+   - Smart geocoding with fallback systems
 
-5. **Modern Chatbot** (`modern_chatbot.py`)
-   - Main orchestrator using Google Gemini API
-   - Automatic tool selection and execution
-   - Contextual conversation handling
+5. **RAG System** (`rag/`)
+   - 6,010+ agricultural advisory chunks
+   - ChromaDB vector database
+   - Semantic search for farming guidance
 
-## 🚀 Key Features
+## ✨ Key Features
 
-### ✅ Current Capabilities
-- **Semantic Search**: Find relevant schemes using natural language queries
-- **Intelligent Tool Selection**: Automatically chooses appropriate tools based on query
-- **Comprehensive Database**: 534+ schemes with detailed information
-- **Farmer-Friendly Responses**: Clear, structured answers with actionable information
-- **State-Specific Filtering**: Search schemes by state or ministry
-- **Conversation Memory**: Maintains context across multiple exchanges
+### 🤖 AI-Powered Intelligence
+- **Natural Language Processing**: Chat naturally about farming needs
+- **Context Awareness**: Remembers location and farming context  
+- **Smart Tool Selection**: Automatically chooses appropriate data sources
+- **Verified Responses**: All answers backed by reliable data
 
-### 🔧 Extensible Architecture
-- **Easy Tool Addition**: Add new tools by implementing `BaseTool` interface
-- **Modular Design**: Each component is independent and testable
-- **Clean Interfaces**: Well-defined APIs between components
-- **Logging**: Comprehensive logging throughout the system
+### 🛠️ Comprehensive Tool Suite
+- **Weather Intelligence**: Current conditions + agricultural forecasts
+- **Location Services**: Find shops, KVKs, and FPOs nearby
+- **Government Schemes**: 534+ schemes with eligibility and application details
+- **Farming Guidance**: Expert agricultural advice and best practices
 
-## � Database Statistics
+### 🌐 Multi-Provider Reliability
+- **Weather**: OpenWeatherMap → Visual Crossing fallback
+- **Geocoding**: LocationIQ → Geoapify fallback  
+- **Maps**: Geoapify → Foursquare fallback
+- **Error Handling**: Graceful degradation when services are unavailable
 
-- **Total Schemes**: 534 agriculture schemes
-- **Data Source**: Excel file with 93 columns of detailed scheme information
-- **Storage**: ChromaDB vector database for semantic search
-- **Categories**: Various categories including crop insurance, financial assistance, irrigation, etc.
-- **Coverage**: Multiple states and central government schemes
+### 🇮🇳 India-Focused Design
+- **Regional Optimization**: Built specifically for Indian agriculture
+- **Local Context**: State-specific schemes and regional farming practices
+- **Farmer-Friendly**: Simple interface with actionable information
 
-## 🛠️ Technical Stack
+## 🎮 How to Use
 
-- **Python 3.8+**
-- **ChromaDB**: Vector database for semantic search
-- **Google Generative AI (Gemini)**: Large language model for responses
-- **Pandas & OpenPyXL**: Excel data processing
-- **Type Hints**: Full type annotation for better code quality
+### Example Conversations:
+```
+🌾 You: What should I plant in Punjab this month?
+🤖 Assistant: Based on current weather and season data...
 
-## 🏃‍♂️ Quick Start
+🌾 You: Is today good for spraying pesticides in Ludhiana?  
+🤖 Assistant: Checking weather conditions for optimal spraying...
 
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+🌾 You: How do I join an FPO near Batala?
+🤖 Assistant: Found 5 FPOs near Batala, Punjab...
 
-2. **Configure API Keys**:
-   Update `config.py` with your Google Gemini API key
+🌾 You: What government schemes are available for cotton farmers?
+🤖 Assistant: Here are relevant schemes from our database...
 
-3. **Run the Chatbot**:
-   ```bash
-   python modern_chatbot.py
-   ```
-
-## 🧪 Testing Individual Components
-
-### Test Data Processor:
-```bash
-python data_processor.py
+🌾 You: My crops are showing yellow leaves, what should I do?
+🤖 Assistant: Based on agricultural best practices...
 ```
 
-### Test Database:
-```bash
-python database.py
-```
+## 📊 Database Coverage
 
-### Test Scheme Search Tool:
-```bash
-python scheme_search_tool.py
-```
+### Government Schemes
+- **534+ Active Schemes**: Comprehensive government program database
+- **State-Specific**: Schemes filtered by region and eligibility
+- **Detailed Information**: Benefits, eligibility, application process
 
-## 📝 Usage Examples
+### FPO Network  
+- **2,947 Organizations**: Complete FPO database across India
+- **Location-Based Search**: Find nearest FPOs with distance calculation
+- **Contact Information**: Direct connections to local organizations
 
-### Basic Queries:
-- "I need financial assistance for my farm"
-- "What crop insurance schemes are available?"
-- "How can I get a loan for irrigation equipment?"
-- "PM-KISAN scheme details"
+### Agricultural Advisory
+- **6,010+ Knowledge Chunks**: Expert farming guidance
+- **Semantic Search**: Natural language query understanding
+- **Context-Aware**: Responses tailored to farming conditions
 
-### State-Specific Queries:
-- "Maharashtra irrigation schemes"
-- "Gujarat subsidy programs"
-- "Tamil Nadu farmer assistance"
+### Location Services
+- **Krishi Vigyan Kendras**: Agricultural extension centers
+- **Input Shops**: Seed, fertilizer, and equipment suppliers
+- **Weather Stations**: Hyperlocal weather data
 
-### Category-Specific Queries:
-- "Organic farming support"
-- "Livestock insurance schemes"
-- "Equipment subsidy programs"
+## 🎯 Perfect For:
 
-## 🔧 Adding New Tools
+✅ **Indian Farmers** seeking intelligent agricultural guidance  
+✅ **Agricultural Extension Workers** providing comprehensive farmer support  
+✅ **FPO Coordinators** helping farmers find and join organizations  
+✅ **Agricultural Students** learning about modern farming practices  
+✅ **Government Officials** delivering citizen services  
 
-1. **Create Tool Class**:
-```python
-from tool_interface import BaseTool
+## 🛠️ Technical Features
 
-class NewTool(BaseTool):
-    def __init__(self):
-        super().__init__(
-            name="new_tool",
-            description="Description of what this tool does"
-        )
-    
-    def is_relevant(self, query: str, context=None) -> bool:
-        # Logic to determine if tool should be used
-        return "keyword" in query.lower()
-    
-    def execute(self, query: str, **kwargs) -> Dict[str, Any]:
-        # Tool implementation
-        return {
-            'success': True,
-            'result': "Tool result",
-            'message': "Success message",
-            'metadata': {}
-        }
-```
+### Reliability & Performance
+- **Multi-Provider Fallbacks**: Never lose service due to single API failures
+- **Intelligent Caching**: Optimized response times for repeated queries  
+- **Error Handling**: Graceful degradation with informative messages
+- **Rate Limiting**: Built-in protection against API quota exhaustion
 
-2. **Register Tool**:
-```python
-# In modern_chatbot.py setup_tools() method
-new_tool = NewTool()
-self.tool_manager.register_tool(new_tool)
-```
+### Data Quality
+- **Verified Sources**: All information from authoritative agricultural sources
+- **Regular Updates**: Database refreshed with latest scheme information
+- **Quality Assurance**: Responses validated against multiple data points
 
-## � Project Structure
+### Developer Experience
+- **Modular Architecture**: Easy to extend with new tools and services
+- **Clean APIs**: Well-defined interfaces between components
+- **Comprehensive Logging**: Full observability for debugging and monitoring
+- **Type Safety**: Python type hints throughout the codebase
 
-```
-agrihack/
-├── modern_chatbot.py          # Main chatbot application
-├── data_processor.py          # Excel data processing
-├── database.py                # ChromaDB vector database
-├── tool_interface.py          # Tool architecture framework
-├── scheme_search_tool.py      # Scheme search implementation
-├── config.py                  # Configuration settings
-├── requirements.txt           # Python dependencies
-├── myscheme-gov-in-2025-08-10.xlsx  # Source data
-└── chroma_db/                 # Vector database storage
-```
+## 📝 Recent Updates
 
-## 🎯 Future Enhancements
+### LocationIQ Integration
+- **Primary Geocoding**: LocationIQ as first choice for address resolution
+- **Geoapify Fallback**: Automatic fallback for rate limit protection
+- **Enhanced Accuracy**: Better location resolution for FPO searches
 
-### Planned Tools:
-- **Weather Tool**: Agricultural weather information
-- **Market Price Tool**: Crop price information
-- **Document Helper Tool**: Application form assistance
-- **Contact Information Tool**: Government office contacts
-- **FAQ Tool**: Common questions and answers
+### Dual Maps API
+- **Geoapify + Foursquare**: Combined coverage for shop and service discovery
+- **Smart Routing**: Automatic selection based on query type and availability
+- **Comprehensive Results**: Agricultural shops, KVKs, and input suppliers
 
-### Architecture Improvements:
-- **Tool Caching**: Cache tool results for better performance
-- **User Profiles**: Personalized recommendations based on user history
-- **Multi-language Support**: Hindi and regional language support
-- **Voice Interface**: Speech-to-text and text-to-speech capabilities
+## 🔧 Future Enhancements
 
-## 🤝 Contributing
+1. **Mobile App**: Native Android/iOS applications
+2. **Voice Interface**: Speech-to-text for hands-free operation
+3. **Crop Monitoring**: Image-based disease and pest identification  
+4. **Market Prices**: Real-time commodity pricing integration
+5. **Weather Alerts**: Proactive notifications for farming activities
 
-To add new tools or enhance existing functionality:
-
-1. Follow the established architecture patterns
-2. Implement proper error handling and logging
-3. Add type hints for better code quality
-4. Create comprehensive tests
-5. Update documentation
-
-## � License
+## 📄 License
 
 This project is designed to help farmers access government schemes and support agricultural development in India.
 
 ---
 
 **Built with ❤️ for Indian farmers** 🇮🇳🌾
+
+Transform your agricultural decision-making with AI intelligence! 🚜🤖

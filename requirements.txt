@@ -1,15 +1,38 @@
-beautifulsoup4==4.12.3
+# Krishi Dhan Sahayak - AI Agriculture Assistant Dependencies
+
+# Core runtime and networking
+httpx==0.28.1
+python-dotenv==1.1.1
 requests==2.31.0
-chromadb==0.4.24
-google-generativeai==0.3.2
+
+# AI and Language Models
+google-generativeai==0.7.2
+sentence-transformers==5.1.0
+
+# Data Processing and Analysis
+pandas==2.1.4
+numpy==1.26.4
+beautifulsoup4==4.12.3
+lxml==5.1.0
+html5lib==1.1
+
+# Vector Database and RAG
+chromadb==1.0.16
+pypdf==6.0.0
+
+# LangChain Framework (if needed for future extensions)
 langchain==0.1.0
 langchain-community==0.0.10
 langchain-google-genai==0.0.6
-python-dotenv==1.0.1
-lxml==5.1.0
-html5lib==1.1
+
+# Terminal Interface and Utilities
+rich==14.1.0
+colorama==0.4.6
+tqdm==4.67.1
+
+# Web Automation (if needed)
 selenium==4.17.2
 webdriver-manager==4.0.1
-pandas==2.1.4
-numpy==1.26.4
+
+# Type Support
 typing-extensions==4.9.0
