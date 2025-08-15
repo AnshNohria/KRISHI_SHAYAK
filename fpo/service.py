@@ -13,6 +13,7 @@ from dataclasses import dataclass
 # Import dual maps API service
 try:
     from maps.dual_api_service import geocode_geoapify, calculate_distance as maps_calculate_distance
+    from weather.service import geocode_locationiq
     MAPS_API_AVAILABLE = True
 except ImportError:
     MAPS_API_AVAILABLE = False
@@ -71,7 +72,7 @@ class FPOService:
         return False
     
     async def geocode_location_async(self, location: str) -> Optional[Tuple[float, float]]:
-        """Geocode a location using Geoapify only."""
+        """Geocode a location using LocationIQ as primary and Geoapify as fallback."""
         if not MAPS_API_AVAILABLE:
             return None
         
@@ -79,14 +80,32 @@ class FPOService:
         if location in self._geocoded_locations:
             return self._geocoded_locations[location]
         
+        # Try LocationIQ first (primary)
+        try:
+            # Parse location for LocationIQ
+            parts = location.split(',')
+            village = parts[0].strip() if parts else location
+            state = parts[1].strip() if len(parts) > 1 else None
+            
+            result = await geocode_locationiq(village, state)
+            if result and result.get('lat') and result.get('lon'):
+                coords = (result['lat'], result['lon'])
+                self._geocoded_locations[location] = coords
+                print(f"✅ LocationIQ geocoded: {location} -> {coords}")
+                return coords
+        except Exception as e:
+            print(f"⚠️ LocationIQ geocoding error for {location}: {e}")
+        
+        # Fallback to Geoapify
         try:
             result = await geocode_geoapify(location)
             if result:
                 coords = (result.lat, result.lon)
                 self._geocoded_locations[location] = coords
+                print(f"🔄 Geoapify fallback geocoded: {location} -> {coords}")
                 return coords
         except Exception as e:
-            print(f"Geoapify geocoding error for {location}: {e}")
+            print(f"❌ Geoapify geocoding error for {location}: {e}")
         
         return None
     

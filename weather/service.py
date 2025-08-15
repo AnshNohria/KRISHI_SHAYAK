@@ -23,6 +23,7 @@ VISUAL_CROSSING_URL = "https://weather.visualcrossing.com/VisualCrossingWebServi
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 VISUAL_CROSSING_API_KEY = os.getenv("VISUAL_CROSSING_API_KEY")
+LOCATIONIQ_API_KEY = os.getenv("LocationIQ_API_KEY")
 
 class WeatherServiceError(Exception):
     """Custom exception for weather service errors."""
@@ -79,6 +80,44 @@ async def geocode_openweather(village: str, state: str) -> Optional[Dict[str, An
             }
     except Exception as e:
         logger.warning(f"OpenWeatherMap geocoding failed: {e}")
+    
+    return None
+
+async def geocode_locationiq(village: str, state: str = None) -> Optional[Dict[str, Any]]:
+    """Geocode using LocationIQ API (primary geocoding service)."""
+    if not LOCATIONIQ_API_KEY:
+        return None
+    
+    # Build query string
+    if state:
+        query = f"{village}, {state}, India"
+    else:
+        query = f"{village}, India"
+    
+    params = {
+        "key": LOCATIONIQ_API_KEY,
+        "q": query,
+        "format": "json",
+        "limit": 1,
+        "countrycodes": "in"  # Restrict to India
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get("https://us1.locationiq.com/v1/search.php", params=params)
+            r.raise_for_status()
+            data = r.json()
+            
+        if data and len(data) > 0:
+            result = data[0]
+            return {
+                "name": result.get("display_name", village),
+                "lat": float(result.get("lat")),
+                "lon": float(result.get("lon")),
+                "state": state or "India"
+            }
+    except Exception as e:
+        logger.warning(f"LocationIQ geocoding failed: {e}")
     
     return None
 

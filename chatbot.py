@@ -26,12 +26,7 @@ class KrishiChatbot:
 
     def __init__(self):
         self.running = True
-        self.agent = GeminiToolAgent()  # agent handles validation and tool-calls
-        # Optional spelling corrections kept minimal
-        self.keyword_corrections = {
-            'ferilizer': 'fertilizer', 'fertlizer': 'fertilizer', 'fertilzer': 'fertilizer',
-            'pestiside': 'pesticide', 'fertiliser': 'fertilizer', 'soyabean': 'soybean'
-        }
+        self.agent = GeminiToolAgent() 
 
     def show_welcome(self):
         """Display welcome message"""
@@ -49,19 +44,6 @@ class KrishiChatbot:
         print("🗣️  Feel free to ask your questions in English.")
         print("="*80)
 
-    def _parse_village_state_simple(self, frag: str) -> Tuple[Optional[str], Optional[str]]:
-        frag = frag.strip()
-        if ',' in frag:
-            parts = [p.strip() for p in frag.split(',') if p.strip()]
-            if len(parts) >= 2:
-                return parts[0].title(), parts[-1].title()
-        return None, None
-
-    # Legacy intent handlers removed in favor of agent-orchestrated tools.
-
-    # (intentionally empty)
-
-    # (no further legacy handlers)
 
     def get_response(self, query: str) -> str:
         processed = query.lower()
