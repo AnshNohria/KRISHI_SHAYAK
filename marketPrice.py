@@ -403,7 +403,7 @@ def get_market_info_for_crop(user_crop_input: str, user_state_input: str, user_d
 
     # 2) Find most recent available date (search back LOOKBACK_DAYS)
     recent_date, recent_records = find_most_recent_data_date(english_crop, state, district, LOOKBACK_DAYS)
-
+    print("RECENT RECORDS\n", recent_records)
     if recent_date:
         # 3) Fetch recent points backward from the most recent date
         df_recent = fetch_recent_days_prices(english_crop, state, district, RECENT_WINDOW_DAYS, start_date=recent_date)
@@ -627,14 +627,14 @@ def current_price_tool(query: str):
     except Exception as e:
         print("Gemini init failed; using naive mapping. Error:", e)
         return "Sorry, I am unable to connect to my AI model to process this request at the moment."
-    
+
     EXTRACTION_PROMPT = f"""
 You are an information extraction assistant.
 Given a user request about agricultural markets, extract the following fields:
 
-- "district": the district name (string)
-- "state": the state name (string)
-- "crop": the crop/commodity name (string)
+- "district_name": the district name (string)
+- "state_name": the state name (string)
+- "commodity": the crop/commodity name (string)
 
 Always respond in *valid JSON* with exactly these three keys.
 Do not include explanations, only JSON.
@@ -642,13 +642,13 @@ Do not include explanations, only JSON.
 Examples:
 
 Input: "What's the price of tamatar in Bangalore, Karnataka?"
-Output: {{"district": "Bangalore", "state": "Karnataka", "crop": "tamatar"}}
+Output: {{"district_name": "Bangalore", "state_name": "Karnataka", "commodity": "tamatar"}}
 
 Input: "Need latest Bhindi price from Pune Maharashtra"
-Output: {{"district": "Pune", "state": "Maharashtra", "crop": "Bhindi"}}
+Output: {{"district_name": "Pune", "state_name": "Maharashtra", "commodity": "Bhindi"}}
 
 Input: "How much for onions in Jaipur, Rajasthan?"
-Output: {{"district": "Jaipur", "state": "Rajasthan", "crop": "onions"}}
+Output: {{"district_name": "Jaipur", "state_name": "Rajasthan", "commodity": "onions"}}
 
 Now extract from this input and output ONLY JSON:
 {query}
@@ -668,54 +668,49 @@ Now extract from this input and output ONLY JSON:
     except Exception as e:
         print(f"Error during LLM invocation or parsing: {e}")
         return "An unexpected error occurred while processing your request."
-
-    state = mapping.get("state")
-    district = mapping.get("district")
-    crop = mapping.get("crop")
-
-    if not all([state, district, crop]):
-        return "Please provide a valid crop, state, and district."
-
-    print("Finding recent data now...")
-    date, records = find_most_recent_data_date(crop, state, district)
     
-    mean_price = 0
-    if records:
-        prices = [extract_modal_price(r) for r in records if extract_modal_price(r) is not None]
-        if prices:
-            mean_price = sum(prices) / len(prices)
-            
-    if not records:
-        return f"I could not find recent price data for {crop} in {district}, {state}."
-
+    mapping = gemini_map_all_inputs(llm, mapping)
+    state = mapping.get("state_name")
+    district = mapping.get("district_name")
+    crop = mapping.get("commodity")
+    print(mapping)
+    recent_date, recent_records = find_most_recent_data_date(crop, state, district, LOOKBACK_DAYS)
+    print("RECENT RECORDS\n", recent_date, "\n" ,recent_records)
+    total = 0
+    c = 0
+    for r in recent_records:
+        total += float(r["Modal_Price"])
+        c += 1
+    mean_price = total / c if c > 0 else 0
     FINAL_PROMPT = f"""
-You are an agricultural assistant. 
-Given the following data, generate a clear and farmer-friendly answer in 2-4 sentences.
+    You are an agricultural assistant. 
+    Given the following data, generate a clear and farmer-friendly answer in 2-4 sentences.
 
-Crop: {crop}
-District: {district}
-State: {state}
-Date: {date.strftime('%d %b %Y')}
+    Crop: {crop}
+    District: {district}
+    State: {state}
+    Date: {recent_date.strftime('%d %b %Y')}
 
-Market Prices:
-{json.dumps(records, indent=2)}
+    Market Prices:
+    {recent_records}
 
-Mean Modal Price across markets: {mean_price:.2f} Rs/Quintal
+    Mean Modal Price across markets: {mean_price:.2f} Rs/Quintal
 
-Answer requirements:
-- Speak in plain, supportive language.
-- Mention the crop, district, and state.
-- List the date and key market prices.
-- Mention the average price as a useful reference.
-- Do not just repeat the table, but explain it in sentences, crisply.
-    """
-    
+    Answer requirements:
+    - Speak in plain, supportive language.
+    - Mention the crop, district, and state.
+    - List the date and modal market prices in all the markets.
+    - Mention the average price as a useful reference.
+    - Do not just repeat the table, but explain it in sentences, crisply.
+        """
+        
     try:
         return llm.invoke(FINAL_PROMPT).content.strip()
     except Exception as e:
         print(f"Error generating final response: {e}")
         return "An error occurred while generating the final response. Please try again."
+    
 
 if __name__ == "__main__":
     print("=== Market Price Agent (single-file) ===")
-    print(current_price_tool("I am from Bangalore, Karnataka. whats the price of tamatar?"))
+    print(current_price_tool("I am from Bangalore, Karnataka. what is the price of tamatar currently?"))
