@@ -1,5 +1,6 @@
 """Retrieve advisory chunks from ChromaDB collection (HTTP or local persistent)."""
 import os
+from pathlib import Path
 from typing import List, Dict
 from urllib.parse import urlparse
 from sentence_transformers import SentenceTransformer
@@ -10,7 +11,9 @@ except Exception:  # pragma: no cover - optional dependency path
     chromadb = None
     Settings = None
 
-DATA_DIR = '../../data/vector/chroma'
+# Resolve repo root: Advisory/rag -> Advisory -> repo
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = str(PROJECT_ROOT / 'data' / 'vector' / 'chroma')
 MODEL_NAME = 'all-MiniLM-L6-v2'
 _model = None
 _client = None

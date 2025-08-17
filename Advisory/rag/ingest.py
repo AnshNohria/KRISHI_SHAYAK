@@ -13,7 +13,9 @@ except Exception:  # pragma: no cover - optional dependency path
     chromadb = None
     Settings = None
 
-DATA_DIR = Path('data/vector')
+# Make paths absolute from repo root (Advisory/rag -> Advisory -> repo)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / 'data' / 'vector'
 STORE_DIR = DATA_DIR / 'icar_store'
 CHROMA_DIR = DATA_DIR / 'chroma'
 MANIFEST = DATA_DIR / 'icar_manifest.json'

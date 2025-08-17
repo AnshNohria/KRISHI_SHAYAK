@@ -5,6 +5,7 @@ Direct access to FPO database with AI optimization for better search
 """
 
 import os
+import sys
 import math
 import asyncio
 from typing import List, Dict, Optional, Tuple
@@ -14,6 +15,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import google.generativeai as genai
+# Ensure project root is on sys.path so sibling packages (maps, weather) can be imported by service
+try:
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+    if PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, PROJECT_ROOT)
+except Exception:
+    pass
+
 from service import FPOService
 
 class SimpleFPOBot:
@@ -199,83 +208,29 @@ Examples:
                         else:
                             # Extract just the city/town name for better geocoding
                             city_name = search_term.split(',')[0].strip()
-                            
-                            # Simple approach: geocode user and a few FPOs to find nearest
-                            print(f"🔄 Finding nearest FPOs to {city_name} in {state_extracted}...")
-                            
-                            # First, geocode user location
-                            user_coords = self.fpo_service.geocode_location_sync(f"{city_name}, {state_extracted}, India")
-                            
-                            if user_coords:
-                                user_lat, user_lon = user_coords
-                                print(f"📍 User at: {user_lat:.4f}, {user_lon:.4f}")
-                                
-                                # Get unique districts in the state
-                                unique_districts = list(set(fpo.district for fpo in state_fpos))
-                                print(f"🏛️ Found {len(unique_districts)} districts in {state_extracted}")
-                                
-                                # Geocode a few districts and calculate distances
-                                district_distances = []
-                                for district in unique_districts[:10]:  # Limit to first 10 districts
-                                    district_coords = self.fpo_service.geocode_location_sync(f"{district}, {state_extracted}, India")
-                                    if district_coords:
-                                        dist_lat, dist_lon = district_coords
-                                        distance = self.fpo_service.calculate_distance(user_lat, user_lon, dist_lat, dist_lon)
-                                        district_distances.append((district, distance))
-                                        print(f"📍 {district}: {distance:.1f} km")
-                                
-                                # Sort districts by distance
-                                district_distances.sort(key=lambda x: x[1])
-                                
-                                # Get FPOs from nearest districts
-                                nearest_fpos = []
-                                for district, distance in district_distances[:3]:  # Top 3 nearest districts
-                                    district_fpos = [fpo for fpo in state_fpos if fpo.district == district]
-                                    for fpo in district_fpos[:2]:  # Max 2 FPOs per district
-                                        nearest_fpos.append((fpo, distance))
-                                
-                                if nearest_fpos:
-                                    response = f"Found {len(nearest_fpos)} nearest FPOs to {city_name}:\n\n"
-                                    for i, (fpo, distance) in enumerate(nearest_fpos[:5], 1):
-                                        response += f"{i}. {fpo.name}\n"
-                                        response += f"   Location: {fpo.district}, {fpo.state}\n"
-                                        response += f"   Distance: ~{distance:.1f} km from {city_name}\n"
-                                        response += "\n"
-                                    return response
-                                else:
-                                    print(f"❌ No districts could be geocoded")
-                            else:
-                                print(f"❌ Could not geocode user location")
-                            
-                            # Fallback: return first 5 FPOs from the state
+                            print(f"🔄 Finding nearest FPOs to {city_name} in {state_extracted} (sync)...")
+
+                            # Use service sync function that geocodes all districts and computes nearest
+                            nearest = self.fpo_service.find_nearest_fpos_with_geocoding_sync(
+                                city_name, state_extracted, limit=5
+                            )
+
+                            if nearest:
+                                response = f"Found {len(nearest)} nearest FPOs to {city_name}:\n\n"
+                                for i, (fpo, distance) in enumerate(nearest, 1):
+                                    response += f"{i}. {fpo.name}\n"
+                                    response += f"   Location: {fpo.district}, {fpo.state}\n"
+                                    response += f"   Distance: ~{distance:.1f} km from {city_name}\n"
+                                    response += "\n"
+                                return response
+
+                            # Fallback: return first 5 from the state
                             response = f"Here are some FPOs in {state_extracted}:\n\n"
                             for i, fpo in enumerate(state_fpos[:5], 1):
                                 response += f"{i}. {fpo.name}\n"
                                 response += f"   Location: {fpo.district}, {fpo.state}\n"
                                 response += "\n"
                             return response
-                                
-                                if user_coords:
-                                    user_lat, user_lon = user_coords
-                                    print(f"� User coordinates: {user_lat:.4f}, {user_lon:.4f}")
-                                    
-                                    # Use find_nearest_fpos with user coordinates
-                                    nearest_results = self.fpo_service.find_nearest_fpos(user_lat, user_lon, limit=3)
-                                    
-                                    if nearest_results:
-                                        response = f"No FPOs found directly in '{search_term}'. Here are the 3 nearest FPOs:\n\n"
-                                        for i, (fpo, distance) in enumerate(nearest_results, 1):
-                                            response += f"{i}. {fpo.name}\n"
-                                            response += f"   Location: {fpo.district}, {fpo.state}\n"
-                                            response += f"   Distance: ~{distance:.1f} km from {city_name}\n"
-                                            if fpo.lat and fpo.lon:
-                                                response += f"   Coordinates: {fpo.lat:.4f}, {fpo.lon:.4f}\n"
-                                            response += "\n"
-                                        return response
-                                    else:
-                                        print(f"❌ No results from find_nearest_fpos either")
-                                else:
-                                    print(f"❌ Could not geocode user location: {city_name}, {state_extracted}")
                     except Exception as e:
                         print(f"❌ Error using service functions: {e}")
                         import traceback
