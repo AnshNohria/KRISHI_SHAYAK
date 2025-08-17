@@ -10,7 +10,7 @@ except Exception:  # pragma: no cover - optional dependency path
     chromadb = None
     Settings = None
 
-DATA_DIR = 'data/vector/chroma'
+DATA_DIR = '../../data/vector/chroma'
 MODEL_NAME = 'all-MiniLM-L6-v2'
 _model = None
 _client = None
@@ -62,17 +62,25 @@ class AdvisoryRetriever:
         _get_collection()
 
     def query(self, text: str, k: int = 4, min_score: float = 0.25) -> List[Dict]:
+        print(f"🔍 Query called with text='{text}', k={k}, min_score={min_score}")
         if not text.strip():
+            print("❌ Empty query text")
             return []
         col = _get_collection()
         if col is None:
+            print("❌ Could not get collection")
             return []
+        print(f"✅ Got collection with {col.count()} documents")
         # Embed query explicitly to ensure same model/normalization as ingestion
         model = _load_model()
+        print(f"✅ Loaded embedding model: {MODEL_NAME}")
         q_emb = model.encode([text], normalize_embeddings=True).tolist()
+        print(f"✅ Generated embedding, length: {len(q_emb[0])}")
         try:
             res = col.query(query_embeddings=q_emb, n_results=k, include=['documents','metadatas','distances'])
-        except Exception:
+            print(f"✅ ChromaDB query returned: {len(res.get('documents', [[]])[0])} results")
+        except Exception as e:
+            print(f"❌ ChromaDB query failed: {e}")
             return []
         docs: List[Dict] = []
         if not res or not res.get('documents'):
