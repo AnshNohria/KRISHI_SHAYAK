@@ -11,7 +11,7 @@ try:
     import chromadb
     from chromadb.config import Settings
     print('Chroma:', getattr(chromadb, '__version__', '?'))
-    client = chromadb.PersistentClient(path='data/vector/chroma', settings=Settings(anonymized_telemetry=False))
+    client = chromadb.PersistentClient(path='../../data/vector/chroma', settings=Settings(anonymized_telemetry=False))
     name = 'icar_advisory'
     try:
         col = client.get_collection(name)

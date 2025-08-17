@@ -72,31 +72,32 @@ class FPOService:
         return False
     
     async def geocode_location_async(self, location: str) -> Optional[Tuple[float, float]]:
-        """Geocode a location using LocationIQ as primary and Geoapify as fallback."""
+        """Geocode a location using LocationIQ (primary) with Geoapify fallback.
+
+        Caches results per full location string to reduce API calls.
+        """
         if not MAPS_API_AVAILABLE:
             return None
-        
-        # Check cache first
+
+        # Cached?
         if location in self._geocoded_locations:
             return self._geocoded_locations[location]
-        
-        # Try LocationIQ first (primary)
+
+        # 1) Try LocationIQ when possible (expects village+state)
         try:
-            # Parse location for LocationIQ
-            parts = location.split(',')
-            village = parts[0].strip() if parts else location
-            state = parts[1].strip() if len(parts) > 1 else None
-            
-            result = await geocode_locationiq(village, state)
-            if result and result.get('lat') and result.get('lon'):
-                coords = (result['lat'], result['lon'])
+            parts = [p.strip() for p in location.split(',') if p.strip()]
+            village = parts[0] if parts else location
+            state_hint = parts[1] if len(parts) > 1 else None
+            liq = await geocode_locationiq(village, state_hint)
+            if liq and liq.get('lat') is not None and liq.get('lon') is not None:
+                coords = (float(liq['lat']), float(liq['lon']))
                 self._geocoded_locations[location] = coords
                 print(f"✅ LocationIQ geocoded: {location} -> {coords}")
                 return coords
         except Exception as e:
             print(f"⚠️ LocationIQ geocoding error for {location}: {e}")
-        
-        # Fallback to Geoapify
+
+        # 2) Fallback to Geoapify
         try:
             result = await geocode_geoapify(location)
             if result:
@@ -106,7 +107,7 @@ class FPOService:
                 return coords
         except Exception as e:
             print(f"❌ Geoapify geocoding error for {location}: {e}")
-        
+
         return None
     
     def geocode_location_sync(self, location: str) -> Optional[Tuple[float, float]]:
@@ -195,42 +196,69 @@ class FPOService:
         fpo_distances.sort(key=lambda x: x[1])
         return fpo_distances[:limit]
     
+    async def _geocode_districts_batch(self, districts: List[str], state: str, max_concurrency: int = 5) -> None:
+        """Geocode a list of districts concurrently with a concurrency limit and cache the results."""
+        sem = asyncio.Semaphore(max_concurrency)
+
+        async def _one(d: str):
+            key = f"{d.lower()}, {state.lower()}"
+            if key in self._district_coordinates:
+                return
+            async with sem:
+                coords = await self.geocode_location_async(f"{d}, {state}, India")
+                if coords:
+                    self._district_coordinates[key] = coords
+
+        await asyncio.gather(*[_one(d) for d in districts])
+
     async def find_nearest_fpos_with_geocoding(self, location_name: str, state: str = None, limit: int = 5) -> List[Tuple[FPO, float]]:
-        """Find nearest FPOs by geocoding user location and calculating distances to state FPOs."""
-        # Geocode the user's location using Geoapify
+        """Geocode the user location, geocode ALL FPO districts in the state, then return nearest."""
+        # 1) Geocode user
         user_coords = await self.geocode_location_async(f"{location_name}, {state}" if state else location_name)
         if not user_coords:
             return []
-        
+
         user_lat, user_lon = user_coords
-        
-        # Filter FPOs by state if specified
+
+        # 2) Filter by state
         if state:
             state_fpos = [fpo for fpo in self.fpos if fpo.state.lower() == state.lower()]
             if not state_fpos:
-                return []  # No FPOs in this state
+                return []
         else:
             state_fpos = self.fpos
-        
-        # Ensure all FPOs have coordinates (geocode districts as needed)
-        fpos_with_coords = []
+
+        # 3) Collect unique districts and geocode them in batch (cached)
+        unique_districts = sorted({fpo.district for fpo in state_fpos if fpo.district})
+        await self._geocode_districts_batch(unique_districts, state or "")
+
+        # 4) Assign coordinates to FPOs from district cache; skip if missing
+        fpos_with_coords: List[FPO] = []
         for fpo in state_fpos:
-            if await self.ensure_fpo_coordinates(fpo):
+            key = f"{fpo.district.lower()}, {(state or '').lower()}"
+            coords = self._district_coordinates.get(key)
+            if coords:
+                fpo.lat, fpo.lon = coords
                 fpos_with_coords.append(fpo)
-        
+
         if not fpos_with_coords:
-            return []  # No FPOs with coordinates
-        
-        # Calculate distances to all FPOs
-        fpo_distances = []
+            return []
+
+        # 5) Distance calc and sort
+        fpo_distances: List[Tuple[FPO, float]] = []
         for fpo in fpos_with_coords:
-            # Calculate distance using dual API
-            distance = self.calculate_distance(user_lat, user_lon, fpo.lat, fpo.lon)
-            fpo_distances.append((fpo, distance))
-        
-        # Sort by distance and return top results
+            dist = self.calculate_distance(user_lat, user_lon, fpo.lat, fpo.lon)
+            fpo_distances.append((fpo, dist))
+
         fpo_distances.sort(key=lambda x: x[1])
         return fpo_distances[:limit]
+
+    def find_nearest_fpos_with_geocoding_sync(self, location_name: str, state: str = None, limit: int = 5) -> List[Tuple[FPO, float]]:
+        """Synchronous wrapper around the async nearest-FPO search."""
+        try:
+            return asyncio.run(self.find_nearest_fpos_with_geocoding(location_name, state, limit))
+        except Exception:
+            return []
     
     def enhance_fpo_with_coordinates(self, fpo: FPO) -> FPO:
         """FPO coordinates are now auto-assigned on initialization, so this is mostly a no-op."""
