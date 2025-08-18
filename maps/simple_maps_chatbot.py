@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import google.generativeai as genai
-from service import search_agri_shops, search_kvk
+# from service import search_agri_shops, search_kvk
 
 class SimpleMapsBot:
     """Simple maps chatbot with AI optimization for location extraction - processes single input with history"""

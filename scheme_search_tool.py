@@ -6,37 +6,34 @@ from database import SchemesVectorDB
 from typing import Dict, Any, List
 import re
 import logging
-
+from data_processor import SchemesDataProcessor
+from database import SchemesVectorDB
 logger = logging.getLogger(__name__)
 
 
 class SchemeSearchTool(BaseTool):
     """Tool for searching agriculture schemes in the vector database"""
     
-    def __init__(self, db: SchemesVectorDB = None):
+    def __init__(self):
         super().__init__(
             name="scheme_search",
             description="Search for relevant agriculture schemes based on user query"
         )
-        self.db = db or SchemesVectorDB()
-        
-        # Initialize LLM for relevance detection
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        self.db = SchemesVectorDB()
+        processor = SchemesDataProcessor("myscheme-gov-in-2025-08-10.xlsx")
+        if processor.load_data():
+            schemes = processor.process_schemes()
+        self.db.add_schemes(schemes)
+        # Initialize Google Generative AI for relevance detection
         import config
-        
-        self.llm = ChatGoogleGenerativeAI(
-            model=config.LLM_MODEL,
-            google_api_key=config.GEMINI_API_KEY,
-            temperature=0.1,  # Low temperature for consistent decisions
-            convert_system_message_to_human=config.CONVERT_SYSTEM_MESSAGE_TO_HUMAN
-        )
+        import google.generativeai as genai
+        genai.configure(api_key="AIzaSyDmDWj8fbIEMIgFvF9lldf97WZIs3qDtXo")
+        self.llm_model = config.LLM_MODEL
     
     def is_relevant(self, query: str, context: Dict[str, Any] = None) -> bool:
         """Use LLM to determine if this tool is relevant for the given query"""
         if not query:
             return False
-        
-        from langchain.prompts import ChatPromptTemplate
         
         # Extract conversation context if available
         conversation_context = ""
@@ -47,15 +44,14 @@ class SchemeSearchTool(BaseTool):
                 conversation_context = f"Previous topics: {context['previous_topics']}"
             if context.get('force_scheme_search'):
                 return True  # Explicit request to use scheme search
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert at determining if queries need agriculture scheme database search in conversation context.
+        prompt = f"""
+You are an expert at determining if queries need agriculture scheme database search in conversation context.
 
 This tool searches for Indian government agriculture schemes, subsidies, loans, benefits, and programs.
 
 Analyze the query along with conversation context to determine if scheme database search is needed.
 
-Return "TRUE" if the query needs scheme database search for:
+Return 'TRUE' if the query needs scheme database search for:
 - Information about specific agriculture schemes, programs, or benefits NOT covered in context
 - Government financial assistance, subsidies, or support programs requiring fresh search
 - Loan schemes (KCC, tractor loans, equipment financing) needing database lookup
@@ -67,9 +63,9 @@ Return "TRUE" if the query needs scheme database search for:
 - General requests for agriculture support when no relevant schemes discussed before
 - User provided specific details (location, farm size) requiring personalized scheme search
 
-Return "FALSE" if the query:
+Return 'FALSE' if the query:
 - Is purely conversational or greeting-like
-- Asks for general farming advice without scheme context  
+- Asks for general farming advice without scheme context
 - Is about weather, prices, or market information
 - Can be answered using schemes/information already discussed in context
 - Is asking to choose between schemes already mentioned
@@ -78,18 +74,22 @@ Return "FALSE" if the query:
 
 Consider the full conversation context when making this decision.
 
-Respond with only "TRUE" or "FALSE"."""),
-            ("user", f"Previous conversation context:\n{conversation_context if conversation_context else 'No previous conversation'}\n\nCurrent query: {query}\n\nConsidering the context, does this query need agriculture scheme database search?")
-        ])
-        
+Respond with only 'TRUE' or 'FALSE'.
+
+Previous conversation context:
+{conversation_context if conversation_context else 'No previous conversation'}
+
+Current query: {query}
+
+Considering the context, does this query need agriculture scheme database search?
+"""
         try:
-            messages = prompt.format_messages()
-            response = self.llm.invoke(messages)
-            decision = response.content.strip().upper()
-            
+            import google.generativeai as genai
+            model = genai.GenerativeModel(self.llm_model)
+            response = model.generate_content(prompt)
+            decision = response.text.strip().upper()
             logger.info(f"LLM relevance decision for query '{query[:50]}...': {decision}")
             return decision == "TRUE"
-            
         except Exception as e:
             logger.error(f"Error in LLM relevance detection: {str(e)}")
             # Conservative fallback - return True for agriculture-related queries
@@ -100,7 +100,7 @@ Respond with only "TRUE" or "FALSE"."""),
     def execute(self, query: str, **kwargs) -> Dict[str, Any]:
         """Execute the scheme search"""
         try:
-            max_results = kwargs.get('max_results', 5)
+            max_results = kwargs.get('max_results', 3)
             filters = kwargs.get('filters', {})
             
             logger.info(f"Executing scheme search for query: {query[:50]}...")
@@ -161,8 +161,6 @@ Respond with only "TRUE" or "FALSE"."""),
         
         # Use LLM to optimize the query
         try:
-            from langchain.prompts import ChatPromptTemplate
-            
             # Extract conversation context if available
             conversation_context = ""
             if "previous conversation context:" in query_lower:
@@ -170,9 +168,8 @@ Respond with only "TRUE" or "FALSE"."""),
                 if len(context_parts) > 1:
                     context_section = context_parts[1].split("User's current input:")[0]
                     conversation_context = context_section.strip()
-            
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are an expert at optimizing search queries for agriculture scheme databases.
+            prompt = f"""
+You are an expert at optimizing search queries for agriculture scheme databases.
 
 Your task is to create the BEST search query to find relevant government agriculture schemes.
 
@@ -187,33 +184,30 @@ Guidelines:
 8. Use terms that are likely to appear in agriculture scheme documents
 
 Examples:
-- User query: "PM Fasal Bima Yojana details" → "PM Fasal Bima Yojana PMFBY crop insurance scheme"
-- User query: "irrigation schemes for Punjab" → "irrigation schemes Punjab water drip micro sprinkler"
-- User query: "tractor loans" → "tractor loan KCC machinery equipment subsidy"
-- User query: "schemes for Meghalaya farmers" → "schemes Meghalaya farmers agriculture subsidy benefit"
+- User query: 'PM Fasal Bima Yojana details' → 'PM Fasal Bima Yojana PMFBY crop insurance scheme'
+- User query: 'irrigation schemes for Punjab' → 'irrigation schemes Punjab water drip micro sprinkler'
+- User query: 'tractor loans' → 'tractor loan KCC machinery equipment subsidy'
+- User query: 'schemes for Meghalaya farmers' → 'schemes Meghalaya farmers agriculture subsidy benefit'
 
-Return ONLY the optimized search query, nothing else."""),
-                ("user", f"""Conversation Context (reference only, don't focus on this):
+Return ONLY the optimized search query, nothing else.
+
+Conversation Context (reference only, don't focus on this):
 {conversation_context if conversation_context else 'No previous conversation'}
 
 User's Current Query (MAIN FOCUS): {actual_user_query}
 
-Generate the best search query to find relevant agriculture schemes for this user's current request.""")
-            ])
-            
-            messages = prompt.format_messages()
-            response = self.llm.invoke(messages)
-            optimized_query = response.content.strip()
-            
+Generate the best search query to find relevant agriculture schemes for this user's current request.
+"""
+            import google.generativeai as genai
+            model = genai.GenerativeModel(self.llm_model)
+            response = model.generate_content(prompt)
+            optimized_query = response.text.strip()
             logger.info(f"LLM optimized query: '{optimized_query}'")
-            
             # Fallback if LLM returns empty or very short response
             if len(optimized_query) < 5:
                 logger.warning("LLM optimization too short, using fallback")
                 optimized_query = self._fallback_optimize(actual_user_query)
-            
             return optimized_query
-            
         except Exception as e:
             logger.error(f"Error in LLM query optimization: {str(e)}")
             # Fallback to rule-based optimization
@@ -776,44 +770,31 @@ Generate the best search query to find relevant agriculture schemes for this use
 
 def main():
     """Test the scheme search tool"""
-    # Initialize database first
-    from data_processor import SchemesDataProcessor
-    from database import SchemesVectorDB
     
-    # Load data
-    processor = SchemesDataProcessor("myscheme-gov-in-2025-08-10.xlsx")
-    if processor.load_data():
-        schemes = processor.process_schemes()
+    tool = SchemeSearchTool()
+    
+    # Test queries
+    test_queries = [
+        "I need financial assistance for my farm",
+        "What crop insurance schemes are available?",
+        "How can I get a loan for irrigation?",
+        "PM-KISAN scheme details",
+        "Subsidy for organic farming"
+    ]
+    
+    print("=== Testing Scheme Search Tool ===\n")
+    
+    for query in test_queries:
+        print(f"Query: {query}")
+        print(f"Relevant: {tool.is_relevant(query)}")
         
-        # Initialize database
-        db = SchemesVectorDB()
-        db.add_schemes(schemes)
+        if tool.is_relevant(query):
+            result = tool.execute(query, max_results=2)
+            print(f"Success: {result['success']}")
+            print(f"Message: {result['message']}")
+            print(f"Results preview: {result['result'][:200]}...\n")
         
-        # Initialize tool
-        tool = SchemeSearchTool(db)
-        
-        # Test queries
-        test_queries = [
-            "I need financial assistance for my farm",
-            "What crop insurance schemes are available?",
-            "How can I get a loan for irrigation?",
-            "PM-KISAN scheme details",
-            "Subsidy for organic farming"
-        ]
-        
-        print("=== Testing Scheme Search Tool ===\n")
-        
-        for query in test_queries:
-            print(f"Query: {query}")
-            print(f"Relevant: {tool.is_relevant(query)}")
-            
-            if tool.is_relevant(query):
-                result = tool.execute(query, max_results=2)
-                print(f"Success: {result['success']}")
-                print(f"Message: {result['message']}")
-                print(f"Results preview: {result['result'][:200]}...\n")
-            
-            print("---\n")
+        print("---\n")
 
 
 if __name__ == "__main__":

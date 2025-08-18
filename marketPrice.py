@@ -8,8 +8,8 @@ from statistics import mean
 import re
 
 # LangChain + Google Genie wrapper (as in your environment)
-from langchain_google_genai import ChatGoogleGenerativeAI
-
+#from langchain_google_genai import ChatGoogleGenerativeAI
+import google.generativeai as genai
 # -------------------------------
 # CONFIG (hardcoded for now)
 # -------------------------------
@@ -27,7 +27,7 @@ HISTORICAL_CSV = "historical_prices.csv"  # ensure exists in working dir
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
 
 load_dotenv()
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or "AIzaSyCXwpZBTO5WaEyvFjhSLwTQDYeF_kp_rj4"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or "AIzaSyDmDWj8fbIEMIgFvF9lldf97WZIs3qDtXo"
 
 state_to_districts = {
     "Andaman and Nicobar Islands": ["Nicobar", "South Andaman", "North and Middle Andaman"],
@@ -157,7 +157,9 @@ def extract_market_name(record):
 def init_gemini():
     if not GOOGLE_API_KEY:
         raise RuntimeError("GOOGLE_API_KEY must be set in env for Gemini usage.")
-    return ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, google_api_key=GOOGLE_API_KEY, temperature=0)
+    genai.configure(api_key=GOOGLE_API_KEY)
+    return genai.GenerativeModel(model_name=GEMINI_MODEL_NAME)
+
 
 def gemini_map_input(llm, user_input: str, field_name: str, candidate_list: list) -> str:
     """
@@ -173,8 +175,8 @@ Choose the closest matching item from the list above.
 Respond with ONLY the corrected {field_name} (must be exactly one from the list).
     """.strip()
 
-    resp = llm.invoke(prompt) 
-    return resp.content.strip()
+    resp = llm.generate_content(contents = prompt)
+    return resp.text.strip()
 
 def gemini_map_all_inputs(llm, user_inputs: dict, csv_path: str = HISTORICAL_CSV) -> dict:
     """
@@ -572,9 +574,9 @@ Example outputs:
 3. Stable prices:
 "Hello! Today, wheat price in Ludhiana is 2100 Rs/Quintal. Usually, at this season, the price is about 2120 Rs/Quintal. For the next week, prices are expected to stay around 2110 Rs/Quintal. Prices look steady, so you can sell now or wait a little, it won't make much difference."
 """
-    resp = llm.invoke(prompt)
+    resp = llm.generate_content(contents=prompt)
 
-    return resp.content.strip()
+    return resp.text.strip()
 
 def price_predict_tool(query: str):
     try:
@@ -606,7 +608,7 @@ Output: {{"district": "Jaipur", "state": "Rajasthan", "crop": "onions"}}
 Now extract from this input and output ONLY JSON:
 {query}
 """
-    obj = llm.invoke(EXTRACTION_PROMPT).content.strip()
+    obj = llm.generate_content(contents = EXTRACTION_PROMPT).text.strip()
     try:
         mapping = json.loads(obj)
     except json.JSONDecodeError:
@@ -654,7 +656,7 @@ Now extract from this input and output ONLY JSON:
 {query}
 """
     try:
-        obj = llm.invoke(EXTRACTION_PROMPT).content.strip()
+        obj = llm.generate_content(contents = EXTRACTION_PROMPT).text.strip()
         mapping = json.loads(obj)
     except json.JSONDecodeError:
         try:
@@ -702,10 +704,11 @@ Now extract from this input and output ONLY JSON:
     - List the date and modal market prices in all the markets.
     - Mention the average price as a useful reference.
     - Do not just repeat the table, but explain it in sentences, crisply.
+    - Note that the date might not be today's, and data of a few days ago might be used.
         """
         
     try:
-        return llm.invoke(FINAL_PROMPT).content.strip()
+        return llm.generate_content(contents=FINAL_PROMPT).text.strip()
     except Exception as e:
         print(f"Error generating final response: {e}")
         return "An error occurred while generating the final response. Please try again."

@@ -2,37 +2,57 @@
 
 # Core runtime and networking
 httpx==0.28.1
-python-dotenv==1.1.1
+python-dotenv==1.0.1
 requests==2.31.0
 
 # AI and Language Models
-google-generativeai==0.7.2
+google-generativeai==0.8.3
 sentence-transformers==5.1.0
+transformers==4.43.2
+#torch==2.3.1
 
 # Data Processing and Analysis
-pandas==2.1.4
-numpy==1.26.4
+# pandas==2.1.4
+# numpy==1.26.4
 beautifulsoup4==4.12.3
 lxml==5.1.0
 html5lib==1.1
 
 # Vector Database and RAG
-chromadb==1.0.16
+chromadb==0.5.3
 pypdf==6.0.0
 
-# LangChain Framework (if needed for future extensions)
-langchain==0.1.0
-langchain-community==0.0.10
-langchain-google-genai==0.0.6
+# LangChain Framework
+langchain==0.2.11
+langchain-community==0.2.10
+#langchain-google-genai==2.1.9
 
 # Terminal Interface and Utilities
 rich==14.1.0
 colorama==0.4.6
 tqdm==4.67.1
 
-# Web Automation (if needed)
+# Web Automation (optional)
 selenium==4.17.2
 webdriver-manager==4.0.1
 
-# Type Support
-typing-extensions==4.9.0
+# Typing Support
+typing-extensions==4.12.2
+
+# # Make sure you’re in your env
+# conda activate marketagent
+
+# # Install torch (CPU-only)
+# conda install pytorch torchvision torchaudio -c pytorch -y
+
+# # Install pandas and numpy
+# conda install pandas=2.1.4 numpy=1.26.4 -y
+
+#Voice Assistant libraries
+flask
+flask-cors
+python-multipart
+groq
+sarvamai
+python-dotenv
+# conda install conda-forge::openpyxl
