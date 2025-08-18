@@ -47,116 +47,116 @@ $env:GEMINI_API_KEY = "..."              # AI agent
    - Dual API architecture (Geoapify + Foursquare)
 
 4. **FPO Service** (`fpo/service.py`)
-   - 2,947 Farmer Producer Organizations database
-   - Distance-based nearest FPO search
-   - Smart geocoding with fallback systems
+   # Krishi Dhan Sahayak
 
-5. **RAG System** (`rag/`)
-   - 6,010+ agricultural advisory chunks
-   - ChromaDB vector database
-   - Semantic search for farming guidance
+   🌾 **Krishi Dhan Sahayak** is an advanced, modular agricultural assistant for Indian farmers, FPOs, and agri-entrepreneurs. It combines state-of-the-art retrieval-augmented generation (RAG), real-time weather, market, and scheme search, and a multilingual voice interface powered by Sarvam.
 
-## ✨ Key Features
+   ---
 
-### 🤖 AI-Powered Intelligence
-- **Natural Language Processing**: Chat naturally about farming needs
-- **Context Awareness**: Remembers location and farming context  
-- **Smart Tool Selection**: Automatically chooses appropriate data sources
-- **Verified Responses**: All answers backed by reliable data
+   ## 🚀 Features
 
-### 🛠️ Comprehensive Tool Suite
-- **Weather Intelligence**: Current conditions + agricultural forecasts
-- **Location Services**: Find shops, KVKs, and FPOs nearby
-- **Government Schemes**: 534+ schemes with eligibility and application details
-- **Farming Guidance**: Expert agricultural advice and best practices
+   - **Conversational AI Orchestrator**: Unified agent routes queries to the right tool (weather, market, FPO, maps, RAG, schemes) and returns clear, actionable answers.
+   - **RAG Chatbot**: ChromaDB-powered retrieval from ICAR advisories and PDFs, with Gemini-based query optimization and context-aware search.
+   - **Weather Chatbot**: Real-time weather for any Indian location, with agricultural advice, using OpenWeatherMap and Visual Crossing APIs.
+   - **Market Price Tools**: Predicts and fetches mandi prices for any commodity, district, and state.
+   - **FPO Finder**: Returns the 3–5 nearest FPOs in your state, using robust geocoding and distance logic.
+   - **Maps Chatbot**: Finds KVKs, agri shops, and more, using Geoapify and dual geocoding APIs.
+   - **Scheme Search**: Semantic search for government schemes, with eligibility and benefit summaries.
+   - **Multilingual Voice Frontend (Sarvam Integration)**:
+     - � **Voice input in any language**: Users can speak their query in Hindi, Punjabi, Tamil, Marathi, etc.
+     - 🗣️ **Voice output in user's language**: The answer is returned in the same language as the query.
+     - 🌐 **How it works**: Sarvam handles speech-to-text and text-to-speech, detects language, and pipes the text query to the orchestrator. The orchestrator returns the answer, which is then spoken back in the user's language.
 
-### 🌐 Multi-Provider Reliability
-- **Weather**: OpenWeatherMap → Visual Crossing fallback
-- **Geocoding**: LocationIQ → Geoapify fallback  
-- **Maps**: Geoapify → Foursquare fallback
-- **Error Handling**: Graceful degradation when services are unavailable
+   ---
 
-### 🇮🇳 India-Focused Design
-- **Regional Optimization**: Built specifically for Indian agriculture
-- **Local Context**: State-specific schemes and regional farming practices
-- **Farmer-Friendly**: Simple interface with actionable information
+   ## 🏗️ Project Structure
 
-## 🎮 How to Use
+   ```
+   Krishi_Dhan_Sahayak/
+   ├── Advisory/
+   │   ├── rag/                # RAG ingestion and retriever logic
+   │   └── simple_chatbot.py   # RAG chatbot
+   ├── fpo/                    # FPO finder and chatbot
+   ├── maps/                   # Maps/KVK/agri shop chatbot
+   ├── weather/                # Weather chatbot and service
+   ├── marketPrice.py          # Market price tools
+   ├── scheme_search_tool.py   # Scheme search
+   ├── orchestrator.py         # Main agentic orchestrator
+   ├── requirements.txt        # All dependencies
+   └── ...
+   ```
 
-### Example Conversations:
-```
-🌾 You: What should I plant in Punjab this month?
-🤖 Assistant: Based on current weather and season data...
+   ---
 
-🌾 You: Is today good for spraying pesticides in Ludhiana?  
-🤖 Assistant: Checking weather conditions for optimal spraying...
+   ## ⚡ Quickstart
 
-🌾 You: How do I join an FPO near Batala?
-🤖 Assistant: Found 5 FPOs near Batala, Punjab...
+   1. **Clone the repo**
+   2. **Install dependencies**
+      ```powershell
+      python -m venv .venv
+      .venv\Scripts\activate
+      pip install -r requirements.txt
+      ```
+   3. **Set up your .env file**
+      - Add API keys for OpenWeatherMap, Visual Crossing, Geoapify, Gemini, etc.
+   4. **Ingest PDFs for RAG**
+      ```powershell
+      python -m Advisory.rag.ingest PDFs/ICAR-En-Kharif-Agro-Advisories-for-Farmers-2025.pdf PDFs/Rabi-Agro-Advisory-2021-22.pdf
+      ```
+   5. **Run the orchestrator**
+      ```powershell
+      python orchestrator.py
+      ```
+   6. **(Optional) Run a chatbot directly**
+      ```powershell
+      python Advisory/simple_chatbot.py
+      python weather/simple_weather_chatbot.py
+      python maps/simple_maps_chatbot.py
+      ```
+   7. **Voice Frontend (Sarvam)**
+      - Follow Sarvam’s setup instructions (see their docs)
+      - Start the Sarvam voice interface; it will handle user speech, call the orchestrator, and speak the answer back in the user’s language.
 
-🌾 You: What government schemes are available for cotton farmers?
-🤖 Assistant: Here are relevant schemes from our database...
+   ---
 
-🌾 You: My crops are showing yellow leaves, what should I do?
-🤖 Assistant: Based on agricultural best practices...
-```
+   ## 🗣️ Sarvam Voice Integration
 
-## 📊 Database Coverage
+   - **Truly Multilingual**: Users can speak in any Indian language; Sarvam detects, transcribes, and translates as needed.
+   - **Seamless Orchestration**: Sarvam passes the recognized text to the orchestrator, which routes the query and returns a text answer.
+   - **Natural Output**: The answer is spoken back in the same language, making the system accessible to all.
+   - **Plug-and-play**: No code changes needed—just run Sarvam and the orchestrator.
 
-### Government Schemes
-- **534+ Active Schemes**: Comprehensive government program database
-- **State-Specific**: Schemes filtered by region and eligibility
-- **Detailed Information**: Benefits, eligibility, application process
+   ---
 
-### FPO Network  
-- **2,947 Organizations**: Complete FPO database across India
-- **Location-Based Search**: Find nearest FPOs with distance calculation
-- **Contact Information**: Direct connections to local organizations
+   ## 🧠 Tech Stack
+   - Python 3.8+
+   - ChromaDB (vector store)
+   - SentenceTransformers (embeddings)
+   - Google Gemini (Generative AI)
+   - Geoapify, LocationIQ, OpenWeatherMap, Visual Crossing (APIs)
+   - Sarvam (voice interface)
+   - Langchain (agent framework)
+   - BeautifulSoup4, Requests, Pydantic, etc.
 
-### Agricultural Advisory
-- **6,010+ Knowledge Chunks**: Expert farming guidance
-- **Semantic Search**: Natural language query understanding
-- **Context-Aware**: Responses tailored to farming conditions
+   ---
 
-### Location Services
-- **Krishi Vigyan Kendras**: Agricultural extension centers
-- **Input Shops**: Seed, fertilizer, and equipment suppliers
-- **Weather Stations**: Hyperlocal weather data
+   ## 📝 Notes
+   - **ChromaDB data is not versioned in git**: Always re-ingest PDFs after clone.
+   - **API keys required**: See `.env.example` for all needed keys.
+   - **PDFs**: Only ingest advisories, not FPO lists.
+   - **Voice**: Sarvam is optional but highly recommended for accessibility.
 
-## 🎯 Perfect For:
+   ---
 
-✅ **Indian Farmers** seeking intelligent agricultural guidance  
-✅ **Agricultural Extension Workers** providing comprehensive farmer support  
-✅ **FPO Coordinators** helping farmers find and join organizations  
-✅ **Agricultural Students** learning about modern farming practices  
-✅ **Government Officials** delivering citizen services  
+   ## 🤝 Credits
+   - ICAR, IMD, and government sources for advisories and data
+   - Sarvam for the open-source voice interface
+   - ChromaDB, SentenceTransformers, and the open-source Python community
 
-## 🛠️ Technical Features
+   ---
 
-### Reliability & Performance
-- **Multi-Provider Fallbacks**: Never lose service due to single API failures
-- **Intelligent Caching**: Optimized response times for repeated queries  
-- **Error Handling**: Graceful degradation with informative messages
-- **Rate Limiting**: Built-in protection against API quota exhaustion
-
-### Data Quality
-- **Verified Sources**: All information from authoritative agricultural sources
-- **Regular Updates**: Database refreshed with latest scheme information
-- **Quality Assurance**: Responses validated against multiple data points
-
-### Developer Experience
-- **Modular Architecture**: Easy to extend with new tools and services
-- **Clean APIs**: Well-defined interfaces between components
-- **Comprehensive Logging**: Full observability for debugging and monitoring
-- **Type Safety**: Python type hints throughout the codebase
-
-## 📝 Recent Updates
-
-### LocationIQ Integration
-- **Primary Geocoding**: LocationIQ as first choice for address resolution
-- **Geoapify Fallback**: Automatic fallback for rate limit protection
-- **Enhanced Accuracy**: Better location resolution for FPO searches
-
+   ## 📄 License
+   MIT
 ### Dual Maps API
 - **Geoapify + Foursquare**: Combined coverage for shop and service discovery
 - **Smart Routing**: Automatic selection based on query type and availability

@@ -298,18 +298,19 @@ async def get_weather(village: str, state: str) -> WeatherData:
         location_name=location_name,
         lat=lat,
         lon=lon,
-        temperature=average_values(ow_data.get("temperature"), vc_data.get("temperature")),
-        feels_like=average_values(ow_data.get("feels_like"), vc_data.get("feels_like")),
+        temperature=average_values(ow_data.get("temperature"), vc_data.get("temperature"))/2,
+        feels_like=average_values(ow_data.get("feels_like"), vc_data.get("feels_like"))/2,
         description=ow_data.get("description") or vc_data.get("description") or "",
-        humidity=average_values(ow_data.get("humidity"), vc_data.get("humidity")),
+        humidity=average_values(ow_data.get("humidity"), vc_data.get("humidity"))/2,
         pressure=ow_data.get("pressure"),  # Only available in OpenWeatherMap
-        visibility=average_values(ow_data.get("visibility"), vc_data.get("visibility")),
-        wind_speed=average_values(ow_data.get("wind_speed"), vc_data.get("wind_speed")),
+        visibility=average_values(ow_data.get("visibility"), vc_data.get("visibility"))/2,
+        wind_speed=average_values(ow_data.get("wind_speed"), vc_data.get("wind_speed"))/2,
         wind_direction=average_values(ow_data.get("wind_direction"), vc_data.get("wind_direction")),
         precipitation_prob=vc_data.get("precipitation_prob"),  # Only in Visual Crossing
-        precipitation_amount=average_values(ow_data.get("precipitation_amount"), vc_data.get("precipitation_amount")),
-        uv_index=vc_data.get("uv_index"),  # Only in Visual Crossing
-        cloud_cover=average_values(ow_data.get("cloud_cover"), vc_data.get("cloud_cover")),
+        precipitation_amount=average_values(ow_data.get("precipitation_amount")
+                                            , vc_data.get("precipitation_amount"))/2,
+        uv_index=vc_data.get("uv_index")/2,  # Only in Visual Crossing
+        cloud_cover=average_values(ow_data.get("cloud_cover"), vc_data.get("cloud_cover"))/2,
         data_sources=sources
     )
 
