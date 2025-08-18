@@ -7,7 +7,9 @@ from marketPrice import price_predict_tool, current_price_tool
 from datetime import datetime
 from scheme_search_tool import SchemeSearchTool
 from maps.simple_maps_chatbot import SimpleMapsBot
-# 
+from weather.simple_weather_chatbot import SimpleWeatherBot
+from fpo.simple_fpo_chatbot import SimpleFPOBot
+from Advisory.simple_chatbot import SimpleKrishiBot
 # GOOGLE_API_KEY = "AIzaSyCXwpZBTO5WaEyvFjhSLwTQDYeF_kp_rj4"
 GOOGLE_API_KEY = "AIzaSyDmDWj8fbIEMIgFvF9lldf97WZIs3qDtXo"
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
@@ -29,13 +31,25 @@ class OrchestratorAgent:
                 "description": "Using the district, state and commodity as inputs, this tool fetches the current or most recent price of the commodity in the said district.",
                 "instance": current_price_tool
             },
-            "scheme_search_tool": {
-                "description": "Search for relevant agriculture schemes in different states of India based on user query and conversation history, passed together as one parameter. The tool optimises the query by itself",
-                "instance": SchemeSearchTool()
-            },
+            # "scheme_search_tool": {
+            #     "description": "Search for relevant agriculture schemes in different states of India based on user query and conversation history, passed together as one parameter. The tool optimises the query by itself",
+            #     "instance": SchemeSearchTool()
+            # },
             "map_search_tool": {
                 "description": "Search for nearest shops to sell agricultural produce, Krishi Vigyan Kendras (KVKs, that are help centers that help farmers register for FPOs, and other schemes), relevant maps and geographical information based on user query and conversation history.",
                 "instance": SimpleMapsBot()
+            },
+            "weather_tool":{
+                "description": "Fetch weather information like Humidity , Temperature  , Pressure , Cloud Cover for a specific location and gives weather Advice",
+                "instance": SimpleWeatherBot()
+            },
+            "fpo_tool": {
+                "description": "Finds the nearest Farmer Producer Organizations (FPOs) in a specific location.",
+                "instance": SimpleFPOBot()
+            },
+            "Crop_Advisory_tool": {
+                "description": "Provides crop advisory answers to queries based on location and current agricultural trends.",
+                "instance": SimpleKrishiBot()
             }
         }
         self.conversation_history = []
@@ -141,6 +155,12 @@ class OrchestratorAgent:
             # This is a key fix based on your implementation
             elif tool_name == "map_search_tool":
                 results[tool_name] = tool_function.get_maps_response(query, self.conversation_history)
+            elif tool_name == "weather_tool":
+                results[tool_name] = tool_function.get_weather_response(query, self.conversation_history)
+            elif tool_name == "fpo_tool":
+                results[tool_name] = tool_function.get_fpo_response(query, self.conversation_history)
+            elif tool_name == "Crop_Advisory_tool":
+                results[tool_name] = tool_function.get_rag_response(query , self.conversation_history)
             else:
                 augmented_query = self.resolve_query_with_history(query, tool_name)
                 print(f"Augmented query for {tool_name}: {augmented_query}")

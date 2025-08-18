@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import google.generativeai as genai
-from service import get_weather, generate_agricultural_advice
+from weather.service import get_weather, generate_agricultural_advice
 
 class SimpleWeatherBot:
     """Simple weather chatbot with AI optimization and conversation history - processes single input with history"""

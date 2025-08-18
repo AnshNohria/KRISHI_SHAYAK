@@ -6,14 +6,14 @@ Focused ChromaDB + Conversational AI tool for agricultural guidance
 
 import os
 import asyncio
-from typing import Optional
+from typing import Optional, List, Dict
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 import google.generativeai as genai
-from rag.retriever import get_retriever
+from Advisory.rag.retriever import get_retriever
 
 class SimpleKrishiBot:
     """Simple agricultural advisor using ChromaDB + Gemini conversation"""
@@ -38,89 +38,102 @@ class SimpleKrishiBot:
             print(f"⚠️  Gemini setup failed: {e}. RAG-only mode.")
             self.model = None
     
-    def optimize_query(self, user_query: str) -> str:
-        """Optimize user query using Gemini for better RAG search results"""
+    def optimize_query(self, user_query: str, conversation_history: Optional[List[Dict]] = None) -> str:
+        """Optimize user query using Gemini for better RAG search results, with optional history context."""
         if not self.model:
             return user_query  # Return original if no AI available
-            
+
         try:
+            history_context = ""
+            if conversation_history:
+                # Use last 3 exchanges' content only (role/content schema expected)
+                recent = [item.get('content', '') for item in conversation_history[-3:] if isinstance(item, dict)]
+                history_context = "\n".join([c for c in recent if c])
+
             prompt = f"""
-You are an agricultural search optimization expert. Your job is to convert user queries into better search terms for finding relevant agricultural information.
+You are an agricultural search optimization expert. Convert user questions to high-recall search terms for retrieving relevant agronomic guidance.
+
+Conversation History (optional, latest last):
+{history_context}
 
 User Query: "{user_query}"
 
 Instructions:
-1. Extract the core agricultural concepts, crops, practices, or problems
-2. Add relevant synonyms and technical terms farmers might use
-3. Include both common and scientific terminology when applicable
-4. Focus on actionable agricultural advice keywords
-5. Keep it concise but comprehensive
-6. If the query is already well-formed, enhance it slightly
+1. Extract core agricultural concepts, crop names, practices, or problems.
+2. Include relevant synonyms and technical/agronomy terms.
+3. Include both common and scientific terms when useful.
+4. Keep concise, keywords-only; no sentences.
+5. Prefer Indian context terms where applicable (e.g., kharif/rabi, paddy, etc.).
 
 Examples:
 - "when to sow wheat in punjab" → "wheat sowing time Punjab planting schedule timing cultivation"
 - "rice pest problem" → "rice pest control disease management insect paddy crop protection"
 - "organic farming" → "organic farming practices sustainable agriculture natural methods chemical-free cultivation"
 
-Optimized Search Query (respond with ONLY the optimized terms):"""
+Respond with ONLY the optimized terms (no quotes, no extra text)."""
 
             response = self.model.generate_content(prompt)
-            optimized = response.text.strip()
-            
+            optimized = (response.text or "").strip()
+
             # Fallback to original if optimization seems wrong
             if len(optimized) < 5 or len(optimized) > 200:
                 return user_query
-                
+
             print(f"🔧 Query optimized: '{user_query}' → '{optimized}'")
             return optimized
-            
+
         except Exception as e:
             print(f"⚠️  Query optimization failed: {e}")
             return user_query
 
-    def get_rag_response(self, query: str) -> str:
-        """Get response from ChromaDB RAG system with optimized query"""
+    def get_rag_response(self, query: str, conversation_history: Optional[List[Dict]] = None) -> str:
+        """Get response from ChromaDB RAG system using an optimized query and optional conversation history."""
         try:
-            # For now, skip optimization and use original query directly
-            print(f"🔍 Searching database with original query: '{query}'")
-            
             retriever = get_retriever()
-            
-            # Try with no threshold to see if anything comes back
-            chunks = retriever.query(query, k=5, min_score=0.0)
+
+            # Optimize query (with history) when possible
+            optimized_query = self.optimize_query(query, conversation_history)
+            q_used = optimized_query or query
+            print(f"🔍 Querying database: text='{q_used}', k=5, min_score=0.0")
+
+            # First pass
+            chunks = retriever.query(q_used, k=5, min_score=0.0)
             print(f"📊 Found {len(chunks)} chunks with min_score=0.0")
-            
+
+            # Fallback to original raw query if optimization yielded nothing
+            if not chunks and q_used != query:
+                print("↩️ No results with optimized terms; retrying with original query…")
+                chunks = retriever.query(query, k=5, min_score=0.0)
+                print(f"📊 Fallback found {len(chunks)} chunks")
+
             if not chunks:
                 return "❌ No relevant agricultural information found in the database."
-            
+
             # Format RAG response
             response = "📚 **Agricultural Advisory:**\n\n"
-            
+
             for i, chunk in enumerate(chunks, 1):
-                score_pct = chunk.get('score', 0) * 100
+                score_pct = (chunk.get('score') or 0) * 100
                 response += f"**{i}.** {chunk['text']}\n"
                 if chunk.get('source'):
                     response += f"   *Source: {chunk['source']}*\n"
                 response += f"   *Relevance: {score_pct:.1f}%*\n\n"
-            
+
             response += f"💡 *Found {len(chunks)} relevant results*\n"
-                
+
             return response
-            
+
         except Exception as e:
             return f"❌ Error retrieving information: {e}"
     
 
     
-    def process_query(self, query: str) -> str:
-        """Process user query with optimization and return response"""
-        print("🔍 Optimizing search query...")
-        
-        # Get RAG results with optimized query
-        rag_response = self.get_rag_response(query)
-        
-        # Return direct RAG response (no AI enhancement)
-        return rag_response
+    def process_query(self, query: str, conversation_history: Optional[List[Dict]] = None) -> str:
+        """Process user query with optimization and optional conversation history, then return RAG response."""
+        print("🔍 Optimizing search query…")
+
+        # Get RAG results with optimized query and history
+        return self.get_rag_response(query, conversation_history)
     
     def show_welcome(self):
         """Display welcome message"""

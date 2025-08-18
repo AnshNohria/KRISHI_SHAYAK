@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import google.generativeai as genai
-# from service import search_agri_shops, search_kvk
+# Use package-qualified imports so this works when called via orchestrator
+from maps.service import search_agri_shops, search_kvk
 
 class SimpleMapsBot:
     """Simple maps chatbot with AI optimization for location extraction - processes single input with history"""
@@ -191,8 +192,8 @@ Examples:
         
         try:
             # Use geocoding to get coordinates for the location
-            from dual_api_service import geocode_dual_api
-            from service import search_kvk
+            from maps.dual_api_service import geocode_dual_api
+            from maps.service import search_kvk
             import asyncio
             
             # Get coordinates for the location
@@ -209,19 +210,19 @@ Examples:
             
             # Search for KVKs
             print(f"🔍 Searching for Krishi Vigyan Kendras near {location}...")
-            kvk_results = asyncio.run(search_kvk(
-                lat, lon, self.api_key, 
+            results, used_radius = asyncio.run(search_kvk(
+                lat, lon, self.api_key,
                 radius_m=50000, limit=5  # Start with 50km for KVKs
             ))
-            
-            if not kvk_results:
+
+            if not results:
                 # Try with broader search
-                kvk_results = asyncio.run(search_kvk(
-                    lat, lon, self.api_key, 
+                results, used_radius = asyncio.run(search_kvk(
+                    lat, lon, self.api_key,
                     radius_m=200000, limit=8  # Expand to 200km for KVKs
                 ))
-            
-            if not kvk_results:
+
+            if not results:
                 return (f"🏫 Krishi Vigyan Kendra Search for '{location}'\n\n"
                        f"📍 Location: {geocode_result.display_name}\n"
                        f"🔍 No KVKs found within 200km radius.\n\n"
@@ -238,9 +239,9 @@ Examples:
             # Format the results
             response = f"🏫 Krishi Vigyan Kendras near '{location}'\n\n"
             response += f"📍 Search center: {geocode_result.display_name}\n"
-            response += f"🔍 Found {len(kvk_results)} KVK facilities:\n\n"
+            response += f"🔍 Found {len(results)} KVK facilities:\n\n"
             
-            for i, kvk in enumerate(kvk_results, 1):
+            for i, kvk in enumerate(results, 1):
                 name = kvk.get('name', 'Unknown KVK')
                 address = kvk.get('address', 'Address not available')
                 distance = kvk.get('distance_km', 0)
@@ -279,39 +280,40 @@ Examples:
         
         try:
             # Use geocoding to get coordinates for the location
-            from dual_api_service import geocode_location, search_shops_near_location
+            from maps.dual_api_service import geocode_dual_api
+            from maps.service import search_agri_shops
             import asyncio
             
             # Get coordinates for the location
-            print(f"� Geocoding location: {location}")
-            geocode_results = asyncio.run(geocode_location(location))
-            
-            if not geocode_results:
+            print(f"🌍 Geocoding location: {location}")
+            geocode_result = asyncio.run(geocode_dual_api(location))
+
+            if not geocode_result:
                 return (f"❌ Could not find coordinates for '{location}'\n\n"
                        f"Please try a more specific location like 'Ludhiana, Punjab' or 'Delhi'")
             
-            # Use the first geocoding result
-            place = geocode_results[0]
-            lat, lon = place['lat'], place['lon']
-            print(f"📍 Found coordinates: {lat}, {lon} for {place.get('formatted', location)}")
+            # Use the geocoding result
+            lat, lon = geocode_result.lat, geocode_result.lon
+            formatted_name = geocode_result.display_name or location
+            print(f"📍 Found coordinates: {lat}, {lon} for {formatted_name}")
             
             # Search for agricultural shops
             print(f"🔍 Searching for agricultural shops near {location}...")
-            shop_results = asyncio.run(search_shops_near_location(
-                "fertilizer shop", lat, lon, self.api_key, 
+            shops, used_radius = asyncio.run(search_agri_shops(
+                "fertilizer shop", lat, lon, self.api_key,
                 radius_m=15000, max_results=8
             ))
-            
-            if not shop_results:
+
+            if not shops:
                 # Try with broader search
-                shop_results = asyncio.run(search_shops_near_location(
-                    "agriculture shop", lat, lon, self.api_key, 
+                shops, used_radius = asyncio.run(search_agri_shops(
+                    "agricultural supply store", lat, lon, self.api_key,
                     radius_m=50000, max_results=8
                 ))
-            
-            if not shop_results:
+
+            if not shops:
                 return (f"🏪 Agricultural Shops Search for '{location}'\n\n"
-                       f"📍 Location: {place.get('formatted', location)}\n"
+                       f"📍 Location: {formatted_name}\n"
                        f"🔍 No agricultural shops found within 50km radius.\n\n"
                        f"Suggestions:\n"
                        f"• Try a different nearby city/town\n"
@@ -320,10 +322,10 @@ Examples:
             
             # Format the results
             response = f"🏪 Agricultural Shops near '{location}'\n\n"
-            response += f"📍 Search center: {place.get('formatted', location)}\n"
-            response += f"🔍 Found {len(shop_results)} agricultural facilities:\n\n"
+            response += f"📍 Search center: {formatted_name}\n"
+            response += f"🔍 Found {len(shops)} agricultural facilities:\n\n"
             
-            for i, shop in enumerate(shop_results, 1):
+            for i, shop in enumerate(shops, 1):
                 name = shop.get('name', 'Unknown Shop')
                 address = shop.get('address', 'Address not available')
                 distance = shop.get('distance_km', 0)
@@ -429,4 +431,6 @@ def main():
         print(f"❌ Startup error: {e}")
 
 if __name__ == "__main__":
-    main()
+    bot = SimpleMapsBot()
+    response = bot.get_maps_response("Fertilizer shops in Ludhiana, Punjab")
+    print(response)

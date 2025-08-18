@@ -23,7 +23,7 @@ try:
 except Exception:
     pass
 
-from service import FPOService
+from fpo.service import FPOService
 
 class SimpleFPOBot:
     """Simple FPO chatbot with AI optimization for search - processes single input with history"""
