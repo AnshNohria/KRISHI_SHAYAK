@@ -2,11 +2,19 @@
 
 A comprehensive, AI-driven agricultural assistant that helps Indian farmers with intelligent guidance, weather information, FPO connections, and government scheme access. Built with modern tool-based architecture for reliability and extensibility.
 
-## � Download Prices Dataset
+## 📥 Prices Dataset Setup (for Market Price tools)
 
-To download the source code, go to this link: https://drive.google.com/file/d/1F8eoP0YY1P87deEZ6Ysr8HRCZw-c395o/view?usp=sharing
+The price tools use a local CSV of historical mandi prices.
 
-## �🚀 Quick Start (Windows PowerShell)
+- Create a folder named `data/` at the repo root (if it doesn't exist).
+- Place your dataset file as `data/historical_prices.csv`.
+- Open `marketPrice.py` and update the `HISTORICAL_CSV` path to point to this file on Windows, for example:
+   - `HISTORICAL_CSV = ".\\data\\historical_prices.csv"`
+   - Download The CSV here : https://drive.google.com/file/d/1F8eoP0YY1P87deEZ6Ysr8HRCZw-c395o/view?usp=sharing
+
+If you have a different filename or location, set the full path accordingly.
+
+## 🚀 Quick Start (Windows PowerShell)
 
 ```powershell
 # 1) Create virtual environment and install dependencies
@@ -21,8 +29,12 @@ $env:GEOAPIFY_API_KEY = "..."            # Maps/shops/KVK
 $env:LocationIQ_API_KEY = "..."          # Primary geocoding
 $env:GEMINI_API_KEY = "..."              # AI agent
 
-# 3) Run the chatbot
-& .\.venv\Scripts\python.exe .\chatbot.py
+# 3) Run the app
+# If you have a runner script named main.py
+& .\.venv\Scripts\python.exe .\main.py
+
+# Or run the orchestrator directly
+& .\.venv\Scripts\python.exe .\orchestrator.py
 ```
 
 ## 🏗️ Architecture Overview
@@ -105,7 +117,7 @@ $env:GEMINI_API_KEY = "..."              # AI agent
       - Add API keys for OpenWeatherMap, Visual Crossing, Geoapify, Gemini, etc.
    4. **Ingest PDFs for RAG**
       ```powershell
-      python -m Advisory.rag.ingest PDFs/ICAR-En-Kharif-Agro-Advisories-for-Farmers-2025.pdf PDFs/Rabi-Agro-Advisory-2021-22.pdf
+      python ingest.py 2
       ```
    5. **Run the orchestrator**
       ```powershell
