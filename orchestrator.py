@@ -26,6 +26,17 @@ class OrchestratorAgent:
     def __init__(self):
         # central client handles absence of key (llm_client will lazily init)
         self.llm_available = bool(GOOGLE_API_KEY)
+        self.system_prompt = (
+            "You are 'Krishi Mitra', an expert, concise, and friendly AI voice assistant for Indian farmers. "
+            "Your job is to help users with agriculture, government schemes, weather, market prices, crop advisory, and local resources. "
+            "Always use the available tools to answer queries: price prediction, current prices, scheme search, maps, weather, FPOs, and crop advisory. "
+            "If a query requires location (state, district) or commodity and the user hasn’t provided it, politely ask for those details. "
+            "Remember the user's last provided state, district, and commodity for future queries unless they specify new ones. "
+            "Keep answers short, clear, and in the user's language. "
+            "If you don’t know the answer or a tool fails, say so and suggest what the user can do next. "
+            "Never make up information about government schemes or prices—always use the tools. "
+            "Be supportive, avoid jargon, and focus on practical advice."
+        )
         from scheme_search_tool import SchemeSearchTool
         self.tools: Dict[str, Dict[str, Any]] = {
             "price_predict_tool": {
@@ -85,7 +96,8 @@ class OrchestratorAgent:
         return ""
 
     def _llm(self, prompt: str) -> str:
-        txt = generate_text(prompt, model_name=GEMINI_MODEL_NAME, retries=2)
+        full_prompt = f"{self.system_prompt}\n\n{prompt}"
+        txt = generate_text(full_prompt, model_name=GEMINI_MODEL_NAME, retries=2)
         if not txt:
             return (
                 "I gathered the data but the model returned an empty answer. "
@@ -100,6 +112,7 @@ class OrchestratorAgent:
         tool_names = list(self.tools.keys())
         tool_desc_map = {name: meta["description"] for name, meta in self.tools.items()}
         prompt = (
+            f"{self.system_prompt}\n\n"
             "You are a routing classifier. Decide if the query needs tools or is a follow-up.\n"
             f"Tools: {tool_desc_map}\n"
             f"History: {json.dumps(self.conversation_history)}\n"
@@ -149,13 +162,15 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
 
     def final_response(self, query: str, tool_results: Dict[str, Any]) -> str:
         prompt = f"""
-User query: {query}
-History: {json.dumps(self.conversation_history)}
-Tool results JSON: {json.dumps(tool_results, indent=2)}
+    {self.system_prompt}
 
-Write a short, clear answer for a farmer in simple language combining the results.
-If any tool failed, briefly mention it helpfully.
-"""
+    User query: {query}
+    History: {json.dumps(self.conversation_history)}
+    Tool results JSON: {json.dumps(tool_results, indent=2)}
+
+    Write a short, clear answer for a farmer in simple language combining the results.
+    If any tool failed, briefly mention it helpfully.
+    """
         return self._llm(prompt)
 
     def handle_query(self, query: str) -> str:
@@ -165,7 +180,7 @@ If any tool failed, briefly mention it helpfully.
 
         if analysis.get("type") == "followup":
             reply = self._llm(
-                f"Conversation so far: {json.dumps(self.conversation_history)}\n"
+                f"{self.system_prompt}\n\nConversation so far: {json.dumps(self.conversation_history)}\n"
                 f"Answer the last user query helpfully and concisely."
             )
         else:
