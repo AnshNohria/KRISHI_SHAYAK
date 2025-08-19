@@ -22,12 +22,12 @@ RECENT_WINDOW_DAYS = 30  # how many recent days to collect for trend (from most 
 RECENT_MIN_POINTS = 3    # minimum points to consider a regression
 RECENT_PROJECTION_DAYS = 7
 
-HISTORICAL_CSV = "historical_prices.csv"  # ensure exists in working dir
+HISTORICAL_CSV = "/Users/siddharthcs/Desktop/capone/KRISHI_SHAYAK/historical_prices.csv"  # ensure exists in working dir
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
 
 load_dotenv()
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or "AIzaSyDmDWj8fbIEMIgFvF9lldf97WZIs3qDtXo"
+GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
 state_to_districts = {
     "Andaman and Nicobar Islands": ["Nicobar", "South Andaman", "North and Middle Andaman"],
@@ -156,9 +156,14 @@ def extract_market_name(record):
 # -------------------------------
 def init_gemini():
     if not GOOGLE_API_KEY:
-        raise RuntimeError("GOOGLE_API_KEY must be set in env for Gemini usage.")
-    genai.configure(api_key=GOOGLE_API_KEY)
-    return genai.GenerativeModel(model_name=GEMINI_MODEL_NAME)
+        print("⚠️  No GEMINI_API_KEY/GOOGLE_API_KEY set; proceeding without LLM normalization.")
+        return None
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        return genai.GenerativeModel(model_name=GEMINI_MODEL_NAME)
+    except Exception as e:
+        print(f"⚠️  Gemini init failed: {e}; continuing without LLM normalization.")
+        return None
 
 
 def gemini_map_input(llm, user_input: str, field_name: str, candidate_list: list) -> str:
@@ -175,8 +180,18 @@ Choose the closest matching item from the list above.
 Respond with ONLY the corrected {field_name} (must be exactly one from the list).
     """.strip()
 
-    resp = llm.generate_content(contents = prompt)
-    return resp.text.strip()
+    if llm is None:
+        # Simple heuristic fallback: case-insensitive exact or prefix match
+        lower = user_input.strip().lower()
+        for cand in candidate_list:
+            if cand.lower() == lower:
+                return cand
+        for cand in candidate_list:
+            if cand.lower().startswith(lower[:3]):
+                return cand
+        return user_input.strip().title()
+    resp = llm.generate_content(contents=prompt)
+    return (resp.text or user_input).strip()
 
 def gemini_map_all_inputs(llm, user_inputs: dict, csv_path: str = HISTORICAL_CSV) -> dict:
     """

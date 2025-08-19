@@ -20,15 +20,32 @@ class SchemeSearchTool(BaseTool):
             description="Search for relevant agriculture schemes based on user query"
         )
         self.db = SchemesVectorDB()
-        processor = SchemesDataProcessor("myscheme-gov-in-2025-08-10.xlsx")
+        processor = SchemesDataProcessor("/Users/siddharthcs/Desktop/capone/KRISHI_SHAYAK/myscheme-gov-in-2025-08-10.xlsx")
+        schemes = None
         if processor.load_data():
             schemes = processor.process_schemes()
-        self.db.add_schemes(schemes)
+            self.db.add_schemes(schemes)
+        else:
+            logger.warning("Scheme Excel file missing or failed to load; scheme search will be disabled.")
         # Initialize Google Generative AI for relevance detection
         import config
+        import os
         import google.generativeai as genai
-        genai.configure(api_key="AIzaSyDmDWj8fbIEMIgFvF9lldf97WZIs3qDtXo")
-        self.llm_model = config.LLM_MODEL
+        # Configure Gemini from environment; do NOT hardcode keys
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            logger.warning("No GEMINI_API_KEY/GOOGLE_API_KEY found in environment; scheme relevance checks will be disabled.")
+            self.llm_model = None
+            self.llm = None
+        else:
+            try:
+                genai.configure(api_key=api_key)
+                self.llm_model = config.LLM_MODEL
+                self.llm = genai.GenerativeModel(self.llm_model)
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini model: {e}")
+                self.llm_model = None
+                self.llm = None
     
     def is_relevant(self, query: str, context: Dict[str, Any] = None) -> bool:
         """Use LLM to determine if this tool is relevant for the given query"""
@@ -84,18 +101,22 @@ Current query: {query}
 Considering the context, does this query need agriculture scheme database search?
 """
         try:
-            import google.generativeai as genai
-            model = genai.GenerativeModel(self.llm_model)
-            response = model.generate_content(prompt)
+            if not self.llm_model or not getattr(self, 'llm', None):
+                return self._keyword_relevance_fallback(query)
+            import google.generativeai as genai  # local import safe
+            response = self.llm.generate_content(prompt)
             decision = response.text.strip().upper()
             logger.info(f"LLM relevance decision for query '{query[:50]}...': {decision}")
             return decision == "TRUE"
         except Exception as e:
             logger.error(f"Error in LLM relevance detection: {str(e)}")
-            # Conservative fallback - return True for agriculture-related queries
-            query_lower = query.lower()
-            fallback_keywords = ['scheme', 'loan', 'subsidy', 'benefit', 'government', 'agriculture', 'farmer']
-            return any(keyword in query_lower for keyword in fallback_keywords)
+            return self._keyword_relevance_fallback(query)
+
+    def _keyword_relevance_fallback(self, query: str) -> bool:
+        """Conservative keyword-based relevance fallback when LLM unavailable."""
+        query_lower = query.lower()
+        fallback_keywords = ['scheme', 'loan', 'subsidy', 'benefit', 'government', 'agriculture', 'farmer', 'kcc', 'pm-kisan', 'pmfby']
+        return any(keyword in query_lower for keyword in fallback_keywords)
     
     def execute(self, query: str, **kwargs) -> Dict[str, Any]:
         """Execute the scheme search"""
@@ -198,9 +219,9 @@ User's Current Query (MAIN FOCUS): {actual_user_query}
 
 Generate the best search query to find relevant agriculture schemes for this user's current request.
 """
-            import google.generativeai as genai
-            model = genai.GenerativeModel(self.llm_model)
-            response = model.generate_content(prompt)
+            if not self.llm_model or not getattr(self, 'llm', None):
+                return self._fallback_optimize(actual_user_query)
+            response = self.llm.generate_content(prompt)
             optimized_query = response.text.strip()
             logger.info(f"LLM optimized query: '{optimized_query}'")
             # Fallback if LLM returns empty or very short response

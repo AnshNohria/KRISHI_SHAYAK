@@ -1,235 +1,209 @@
-# orchestrator.py
+"""Orchestrator agent that routes farmer queries to the correct tools and
+generates a concise natural-language response.
+
+This version removes LangChain usage and directly calls google-generativeai.
+It also adds defensive handling to avoid empty LLM responses (important for
+the voice assistant flow where TTS expects non-empty text).
+"""
+
 from typing import List, Dict, Any
 import json
-import google.generativeai as genai
 import re
+import os
+from llm_client import generate_text
+
 from marketPrice import price_predict_tool, current_price_tool
-from datetime import datetime
-from scheme_search_tool import SchemeSearchTool
 from maps.simple_maps_chatbot import SimpleMapsBot
 from weather.simple_weather_chatbot import SimpleWeatherBot
 from fpo.simple_fpo_chatbot import SimpleFPOBot
 from Advisory.simple_chatbot import SimpleKrishiBot
-# GOOGLE_API_KEY = "AIzaSyCXwpZBTO5WaEyvFjhSLwTQDYeF_kp_rj4"
-GOOGLE_API_KEY = "AIzaSyDmDWj8fbIEMIgFvF9lldf97WZIs3qDtXo"
+
+GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
+
 
 class OrchestratorAgent:
     def __init__(self):
-        """
-        llm: your main LLM instance (e.g. Groq or Gemini)
-        tools: dict of tool_name -> tool_instance
-        """
-        genai.configure(api_key=GOOGLE_API_KEY)
-        self.llm = genai.GenerativeModel(model_name=GEMINI_MODEL_NAME)
-        self.tools = {
+        # central client handles absence of key (llm_client will lazily init)
+        self.llm_available = bool(GOOGLE_API_KEY)
+        from scheme_search_tool import SchemeSearchTool
+        self.tools: Dict[str, Dict[str, Any]] = {
             "price_predict_tool": {
-                "description": "Using the district, state and commodity, the tool predicts if the modal price of the commodity could go up or down in the next 7 days, and whether the farmer should hold or sell his produce",
-                "instance": price_predict_tool
+                "description": "Predicts 7‑day direction (hold/sell advice) using district, state, commodity.",
+                "instance": price_predict_tool,
             },
             "current_price_tool": {
-                "description": "Using the district, state and commodity as inputs, this tool fetches the current or most recent price of the commodity in the said district.",
-                "instance": current_price_tool
+                "description": "Fetches latest/modal market price for a commodity in a district/state.",
+                "instance": current_price_tool,
             },
-            # "scheme_search_tool": {
-            #     "description": "Search for relevant agriculture schemes in different states of India based on user query and conversation history, passed together as one parameter. The tool optimises the query by itself",
-            #     "instance": SchemeSearchTool()
-            # },
+            "scheme_search_tool": {
+                "description": "Searches Indian government agriculture schemes, subsidies, loans, benefits, and programs using semantic and keyword matching.",
+                "instance": SchemeSearchTool(),
+            },
             "map_search_tool": {
-                "description": "Search for nearest shops to sell agricultural produce, Krishi Vigyan Kendras (KVKs, that are help centers that help farmers register for FPOs, and other schemes), relevant maps and geographical information based on user query and conversation history.",
-                "instance": SimpleMapsBot()
+                "description": "Nearby agri points: markets, KVKs, selling centers, geo info.",
+                "instance": SimpleMapsBot(),
             },
-            "weather_tool":{
-                "description": "Fetch weather information like Humidity , Temperature  , Pressure , Cloud Cover for a specific location and gives weather Advice",
-                "instance": SimpleWeatherBot()
+            "weather_tool": {
+                "description": "Weather conditions & simple advice for a location.",
+                "instance": SimpleWeatherBot(),
             },
             "fpo_tool": {
-                "description": "Finds the nearest Farmer Producer Organizations (FPOs) in a specific location.",
-                "instance": SimpleFPOBot()
+                "description": "Nearest Farmer Producer Organisations (FPOs).",
+                "instance": SimpleFPOBot(),
             },
             "Crop_Advisory_tool": {
-                "description": "Provides crop advisory answers to queries based on location and current agricultural trends.",
-                "instance": SimpleKrishiBot()
-            }
+                "description": "RAG based crop advisory (diseases, best practices).",
+                "instance": SimpleKrishiBot(),
+            },
         }
-        self.conversation_history = []
+        self.conversation_history: List[Dict[str, str]] = []
+        self.last_tool_results: Dict[str, Any] = {}
 
+    # ------------------------------------------------------------------
+    # Low-level LLM helpers
+    # ------------------------------------------------------------------
+    def _extract_text(self, resp) -> str:
+        if resp is None:
+            return ""
+        try:
+            if getattr(resp, "text", None):
+                return resp.text.strip()
+        except Exception:
+            pass
+        try:  # fallback aggregate
+            candidates = getattr(resp, "candidates", []) or []
+            if candidates:
+                cand = candidates[0]
+                content = getattr(cand, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if parts:
+                    texts = [getattr(p, "text", "") for p in parts if getattr(p, "text", "")]
+                    return "\n".join(t.strip() for t in texts if t.strip())
+        except Exception:
+            pass
+        return ""
+
+    def _llm(self, prompt: str) -> str:
+        txt = generate_text(prompt, model_name=GEMINI_MODEL_NAME, retries=2)
+        if not txt:
+            return (
+                "I gathered the data but the model returned an empty answer. "
+                "Please rephrase or ask a follow-up."
+            )
+        return txt
+
+    # ------------------------------------------------------------------
+    # Orchestration steps
+    # ------------------------------------------------------------------
     def analyze_query(self, query: str) -> Dict[str, Any]:
-        """
-        First LLM call: analyze the query.
-        Returns dict with:
-        - type: "followup" or "tools"
-        - tools_needed: list of tool names if applicable
-        """
         tool_names = list(self.tools.keys())
-        analysis_prompt = f"""
-            You are the orchestrator agent.
-            Task: Analyze the query and decide if it can be answered
-            directly from history or if tools are needed.
-
-            Available tools and their purpose:
-            { {name: meta["description"] for name, meta in self.tools.items()} }
-
-            Query: {query}
-            History: {json.dumps(self.conversation_history)}
-
-            Respond ONLY in JSON with keys:
-            - "type": "followup" or "tools"
-            - "tools_needed": list of tool names (from {tool_names})
-
-            Examples:
-
-            1. Tools case:
-            Query: "What is the modal price of onions in Jaipur, Rajasthan?"
-            History: []
-            Response: {{
-            "type": "tools",
-            "tools_needed": ["current_price_tool"]
-            }}
-
-            2. Followup case:
-            Query: "Can you repeat that?"
-            History: [{{"role": "user", "content": "What is the modal price of onions in Jaipur, Rajasthan?"}},
-                    {{"role": "assistant", "content": "The modal price of onions in Jaipur yesterday was Rs. 2000/quintal."}}]
-            Response: {{
-            "type": "followup",
-            "tools_needed": []
-            }}
-            """
-        response = self.llm.generate_content(contents=analysis_prompt)
-        return self._safe_json(response.text)
+        tool_desc_map = {name: meta["description"] for name, meta in self.tools.items()}
+        prompt = (
+            "You are a routing classifier. Decide if the query needs tools or is a follow-up.\n"
+            f"Tools: {tool_desc_map}\n"
+            f"History: {json.dumps(self.conversation_history)}\n"
+            f"User Query: {query}\n\n"
+            f"Return ONLY JSON with keys: 'type' (tools|followup) and 'tools_needed' (list subset of {tool_names}).\n"
+            "If unsure which tool, choose the closest."
+        )
+        text = generate_text(prompt, model_name=GEMINI_MODEL_NAME, retries=1)
+        return self._safe_json(text)
 
     def resolve_query_with_history(self, query: str, tool_name: str) -> str:
-        """
-        Uses an LLM call to fill in missing details from the history and append them to the query.
-        """
-        tool_description = self.tools[tool_name]['description']
+        tool_desc = self.tools[tool_name]["description"]
         prompt = f"""
-        You are an intelligent assistant. Your task is to **resolve and augment a user's query** by finding any missing information (like commodity, district, or state) from the conversation history.
-
-        **Tool Information:**
-        Tool Name: {tool_name}
-        Tool Description: {tool_description}
-        The tool requires information about commodity, district, and state.
-
-        **Conversation History (most recent info at the end):**
-        {json.dumps(self.conversation_history)}
-
-        **Current User Query:**
-        "{query}"
-
-        **Instructions:**
-        1. Read the most recent conversation entries to find the latest-mentioned **commodity, district, and state**.
-        2. If the **current query** is a follow-up (e.g., "how much?", "should I sell?"), use the information from the history to make the query complete.
-        3. If the current query already contains the information, use it. Do not just repeat the history.
-        4. The output must be a single, natural-language sentence or phrase that is a complete and unambiguous query for the tool. Do not just output JSON.
-
-        **Examples:**
-        History: [{{"role": "user", "content": "What is the price of onions in Jaipur, Rajasthan?"}}]
-        Current Query: "Will it go up?"
-        Correct Output: "Will the price of onions in Jaipur, Rajasthan go up?"
-
-        History: [{{"role": "user", "content": "Price of tomatoes in Bangalore."}}]
-        Current Query: "What about in Mysore?"
-        Correct Output: "What is the price of tomatoes in Mysore, Karnataka?"
-
-        **Now, resolve this query:**
-        Augmented Query:
-        """
-        response = self.llm.generate_content(prompt)
-        return response.text.strip()
+Augment the user query with any missing (commodity, district, state) gleaned from history.
+History: {json.dumps(self.conversation_history)}
+Tool: {tool_name} - {tool_desc}
+Original: {query}
+Output a SINGLE natural language query (no JSON) that the tool can understand.
+"""
+        return self._llm(prompt).strip()
 
     def call_tools(self, query: str, tools_needed: List[str]) -> Dict[str, Any]:
-        results = {}
-        for tool_name in tools_needed:
-            tool_entry = self.tools.get(tool_name)
-            if not tool_entry:
+        results: Dict[str, Any] = {}
+        for name in tools_needed:
+            entry = self.tools.get(name)
+            if not entry:
                 continue
-            tool_function = tool_entry["instance"]
-            if tool_name == "scheme_search_tool":
-                mod_qry = "\n".join(
-                    f"{item['role'].capitalize()}: {item['content']}" for item in self.conversation_history
-                ) + "\nCurrent Query: " + query
-                results[tool_name] = tool_function.execute(mod_qry)
-            # Call the tool function directly as it is not a class with a .run() method
-            # This is a key fix based on your implementation
-            elif tool_name == "map_search_tool":
-                results[tool_name] = tool_function.get_maps_response(query, self.conversation_history)
-            elif tool_name == "weather_tool":
-                results[tool_name] = tool_function.get_weather_response(query, self.conversation_history)
-            elif tool_name == "fpo_tool":
-                results[tool_name] = tool_function.get_fpo_response(query, self.conversation_history)
-            elif tool_name == "Crop_Advisory_tool":
-                results[tool_name] = tool_function.get_rag_response(query , self.conversation_history)
-            else:
-                augmented_query = self.resolve_query_with_history(query, tool_name)
-                print(f"Augmented query for {tool_name}: {augmented_query}")
-                results[tool_name] = tool_function(augmented_query)
+            inst = entry["instance"]
+            try:
+                if name == "scheme_search_tool":
+                    # Use the tool's execute method for scheme search
+                    results[name] = inst.execute(query, conversation_history=self.conversation_history)
+                elif name == "map_search_tool":
+                    results[name] = inst.get_maps_response(query, self.conversation_history)
+                elif name == "weather_tool":
+                    results[name] = inst.get_weather_response(query, self.conversation_history)
+                elif name == "fpo_tool":
+                    results[name] = inst.get_fpo_response(query, self.conversation_history)
+                elif name == "Crop_Advisory_tool":
+                    results[name] = inst.get_rag_response(query, self.conversation_history)
+                else:  # price tools
+                    aug = self.resolve_query_with_history(query, name)
+                    results[name] = inst(aug)
+            except Exception as e:
+                results[name] = f"Tool {name} failed: {e}"
         return results
 
     def final_response(self, query: str, tool_results: Dict[str, Any]) -> str:
-        """
-        Last LLM call: weave tool results into farmer-friendly response.
-        """
         prompt = f"""
-        User query: {query}
-        Conversation history: {json.dumps(self.conversation_history)}
-        Tool results: {json.dumps(tool_results, indent=2)}
+User query: {query}
+History: {json.dumps(self.conversation_history)}
+Tool results JSON: {json.dumps(tool_results, indent=2)}
 
-        Write a clear, concise, and crisp answer for the farmer, in simple language.
-        Combine all the important information from the tool results into a single, cohesive response.
-        If the 'scheme_search_tool' is used, ensure that all details of the schemes are included, and if applicable, provide a summary of the benefits and eligibility criteria.
-        If a tool returned an error or an "unable to process" message, explain this to the farmer in a helpful way.
-        """
-        response = self.llm.generate_content(contents=prompt)
-        return response.text
+Write a short, clear answer for a farmer in simple language combining the results.
+If any tool failed, briefly mention it helpfully.
+"""
+        return self._llm(prompt)
 
     def handle_query(self, query: str) -> str:
-        """
-        Main entry point: orchestrates everything.
-        """
         self.conversation_history.append({"role": "user", "content": query})
-
         analysis = self.analyze_query(query)
-        print(f"Analysis result: {analysis}")
+        print("Analysis:", analysis)
 
         if analysis.get("type") == "followup":
-            # Just generate response from history
-            reply = self.llm.generate_content(
+            reply = self._llm(
                 f"Conversation so far: {json.dumps(self.conversation_history)}\n"
-                f"Answer the last user query directly in a helpful way."
-            ).text
+                f"Answer the last user query helpfully and concisely."
+            )
         else:
-            # Call tools
-            tools_to_call = analysis.get("tools_needed", [])
-            print(f"Tools to call: {tools_to_call}")
-            if tools_to_call:
-                tool_results = self.call_tools(query, tools_to_call)
-                print(f"Tool results: {tool_results}")
+            tools = analysis.get("tools_needed", [])
+            print("Tools chosen:", tools)
+            if tools:
+                tool_results = self.call_tools(query, tools)
+                self.last_tool_results = tool_results
+                print("Tool results:", {k: (str(v)[:120] + '...') if isinstance(v, str) and len(v) > 120 else v for k, v in tool_results.items()})
                 reply = self.final_response(query, tool_results)
             else:
-                # Fallback if no tools were identified but type was not followup
-                reply = "I'm sorry, I couldn't identify a specific action for this request. Can you please rephrase?"
+                reply = "I couldn't determine the exact action. Please rephrase with more specifics."
+
+        if not reply:
+            reply = "I processed your request but couldn't form a full answer. Please ask again with more detail."
 
         self.conversation_history.append({"role": "assistant", "content": reply})
         return reply
 
+    # ------------------------------------------------------------------
+    # JSON safety helper
+    # ------------------------------------------------------------------
     def _safe_json(self, text: str) -> Dict[str, Any]:
         try:
-            # Use regex to find the JSON object and strip surrounding text
-            json_match = re.search(r"\{.*\}", text, re.DOTALL)
-            if json_match:
-                json_string = json_match.group(0)
-                return json.loads(json_string)
-            else:
-                print(f"Warning: No JSON object found in LLM response: {text}")
+            m = re.search(r"\{.*?\}", text, re.DOTALL)
+            if not m:
+                print("No JSON found in analysis response:", text)
                 return {"type": "followup", "tools_needed": []}
-        except json.JSONDecodeError as e:
-            print(f"JSONDecodeError: {e} | Raw text: {text}")
-            return {"type": "followup", "tools_needed": []}
+            data = json.loads(m.group(0))
+            if data.get("type") not in ("tools", "followup"):
+                data["type"] = "followup"
+            if not isinstance(data.get("tools_needed"), list):
+                data["tools_needed"] = []
+            # keep only known tools
+            data["tools_needed"] = [t for t in data["tools_needed"] if t in self.tools]
+            return data
         except Exception as e:
-            print(f"An unexpected error occurred in _safe_json: {e}")
+            print("_safe_json error:", e, "| raw:", text)
             return {"type": "followup", "tools_needed": []}
 
-# Note: The tool functions (price_predict_tool and current_price_tool) would need to be in
-# a separate file (e.g., marketPrice.py) as indicated by your imports.
+# End of file

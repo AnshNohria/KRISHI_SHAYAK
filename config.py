@@ -3,8 +3,8 @@
 import os
 from typing import Optional
 
-# Gemini API Configuration
-GEMINI_API_KEY: str = "AIzaSyDDkS7F1TOR4AqthgGWrgyqM434qfNy_OQ"
+# Gemini API Configuration (loaded from environment; do not hardcode)
+GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
 # Database Configuration
 CHROMA_DB_PATH: str = "./chroma_db"

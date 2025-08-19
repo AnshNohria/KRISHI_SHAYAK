@@ -223,9 +223,20 @@ def ingest(pdf_paths: List[str]):
     print("Ingestion complete (ChromaDB).")
     save_manifest(manifest)
 
+
+# New: Direct ingest function for kharif.pdf and rabi.pdf in this directory
+def ingest_kharif_rabi():
+    here = Path(__file__).parent
+    kharif = here / "kharif.pdf"
+    rabi = here / "rabi.pdf"
+    pdfs = [str(kharif), str(rabi)]
+    ingest(pdfs)
+
+# Optional: keep CLI for manual runs, but default to ingest_kharif_rabi if no args
 if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2:
-        print("Usage: python -m rag.ingest <pdf1.pdf> <pdf2.pdf> ...")
-        raise SystemExit(1)
-    ingest(sys.argv[1:])
+        print("No PDF arguments provided; ingesting kharif.pdf and rabi.pdf from local directory.")
+        ingest_kharif_rabi()
+    else:
+        ingest(sys.argv[1:])

@@ -1,6 +1,7 @@
 """
 Modern Agriculture Schemes Chatbot with Tool-based Architecture
 """
+import os
 import google.generativeai as genai
 import logging
 from typing import List, Dict, Optional, Any
@@ -21,9 +22,18 @@ class AgricultureSchemesBot:
     """Modern agriculture schemes chatbot with tool-based architecture"""
     
     def __init__(self):
-        # Configure Gemini API
-        genai.configure(api_key=config.GEMINI_API_KEY)
-    self.model = genai.GenerativeModel('gemini-2.5-flash')
+        # Configure Gemini API from environment (via config)
+        api_key = config.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            logger.warning("No GEMINI_API_KEY/GOOGLE_API_KEY found; LLM disabled.")
+            self.model = None
+        else:
+            try:
+                genai.configure(api_key=api_key)
+                self.model = genai.GenerativeModel('gemini-2.5-flash')
+            except Exception as e:
+                logger.error(f"Gemini init failed: {e}; LLM disabled.")
+                self.model = None
         
         # Initialize tool manager
         self.tool_manager = ToolManager()
