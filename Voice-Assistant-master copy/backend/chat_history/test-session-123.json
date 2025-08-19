@@ -1,0 +1,95 @@
+System: You are 'Agri Mitra', a concise and friendly AI voice assistant for Indian farmers. If the user's question is about agriculture, government schemes, or crop advice that requires knowing their state and district, ask for those details. Otherwise, answer directly and keep it brief. Reply in the user's language.
+User: Hey, what's up? My name is Aditya.
+Bot: Service load is high right now (quota). Please retry shortly.
+User: Hey, what's up? How are you doing?
+Bot: I'm doing well, thank you!  How about you?
+User: मेरा नाम आदित्य है। मैं पिलानी राजस्थान से हूँ।
+Bot: Service load is high right now (quota). Please retry shortly.
+User: हे व्हाट्स अप बेबी?
+Bot: Service load is high right now (quota). Please retry shortly.
+User: Hi.
+Bot: Hi there!
+User: Can you tell me whether in Pilani, Rajasthan?
+Bot: Service load is high right now (quota). Please retry shortly.
+User: How are you doing?
+Bot: Service load is high right now (quota). Please retry shortly.
+User: Hello.
+Bot: Service load is high right now (quota). Please retry shortly.
+User: Can you tell me what is weather in Palani, Rajasthan?
+Bot: Service load is high right now (quota). Please retry shortly.
+User: Hey, can you tell me whether you're in Pilani, Rajasthan?
+Bot: I am a large language model, I don't have a physical location.
+User: Tell me what is temperature in Pilani, Rajasthan?
+Bot: The temperature in Pilani, Rajasthan is 63.33°C (feels like 69.17°C).  It's overcast with 49.98% humidity.  It's hot, so make sure your crops have enough water and shade.  The humidity is good for growth.
+User: कह दें मुझे भिंडी का दाम क्या है जयपुर राजस्थान में
+Bot: मुझे माफ़ करना, लेकिन मुझे जयपुर में भिंडी के दाम की सही जानकारी नहीं मिल पाई।  मैंने  दाम जानने के लिए कोशिश की, लेकिन  टूल काम नहीं कर पाया।  आप किसी स्थानीय बाजार या किसान मंडी से पूछकर दाम पता कर सकते हैं।
+User: Can you tell me the price of okra in Jaipur, Rajasthan?
+Bot: I cannot give you the current price of okra in Jaipur.  I tried to use a price-checking tool, but it didn't work.  To find the price, you should check local markets or online agricultural marketplaces in Jaipur.
+User: I have brinjal produce, so should I hold it or sell it? I live in Karnataka, Bangalore.
+Bot: Brinjal prices in Bangalore are currently ₹3500 per quintal and are predicted to rise to ₹3911 in the next week.  Therefore, it's best to hold your brinjal for a few days before selling.
+User: Can you tell me about some government policies uh related to agriculture which can help me?
+Bot: Several Indian government policies support agriculture.  To find relevant ones, search for schemes related to your specific needs (e.g., crop insurance, irrigation, subsidies, market access) on the websites of the Ministry of Agriculture & Farmers Welfare (India) and your state's Department of Agriculture.  You can also consult local agricultural extension officers for personalized advice.
+User: Tell me about crop insurance scheme.
+Bot: India offers various crop insurance schemes, primarily Pradhan Mantri Fasal Bima Yojana (PMFBY).  This scheme provides insurance coverage against crop failure due to various perils like drought, flood, pest attack, etc.  Eligibility, coverage amount, and premium vary depending on the crop, location, and season.  Contact your local agricultural extension officer or visit the PMFBY website for details.
+User: Can you focus some light on PM Kisan Yojana for eligibility?
+Bot: PM Kisan Yojana provides income support to small and marginal farmers.  Eligibility criteria generally include owning cultivable land, a specified landholding size (varies by state), and exclusion of certain categories like institutional landholders and high-income individuals.  Check the official PM Kisan website for precise and up-to-date eligibility details specific to your state.
+User: Uh, my name is Aditya.
+Bot: It's nice to meet you, Aditya.  Is there anything else I can help you with today regarding agriculture or other topics?
+User: Do you remember my name?
+Bot: Yes, Aditya.
+User: Can you tell me the price of benzene in Bangalore, Karnataka?
+Bot: I cannot find the price of benzene in Bangalore.  I tried using a price tool, but it didn't work.  To find this information, you'll need to contact local chemical suppliers directly.
+User: Every bridge old I do
+Bot: I'm not sure what you mean by "Every bridge old I do".  Can you please rephrase your question or provide more context?
+User: Tell me whether in Mumbai, Maharashtra or Karnataka.
+Bot: Mumbai is in Maharashtra, not Karnataka.
+User: The ship is no accident. It's built on a foundation.
+Bot: That's a metaphorical statement.  It means something significant wasn't created by chance; it was carefully planned and constructed.
+User: हाय, क्या आप मुझे बता सकते हैं कि मुंबई महाराष्ट्र में क्या वेदर है?
+Bot: मुंबई में मौसम बहुत गर्म और नम है (53°C)।  आसमान में बादल छाए हुए हैं और बारिश की 100% संभावना है।  फसलों को पर्याप्त पानी दें, छाया दें और फंगल बीमारियों पर नज़र रखें।  बारिश के कारण छिड़काव टाल दें।
+User: Hi, can you tell me what is the price of bhindi in Jaipur, Rajasthan?
+Bot: The average price of bhindi in Jaipur on August 18th, 2025 was ₹1750 per quintal.  Prices ranged from ₹1500 to ₹2000 per quintal.
+User: Hi, uh, I am from Jaipur, Rajasthan. Should I hold my produce of bhindi or sell it?
+Bot: Bhindi prices in Jaipur are currently ₹1750 per quintal, lower than the usual price for this time of year (₹2026).  Prices are expected to drop to ₹980 per quintal in the next week.  It's best to sell your bhindi now.
+User: Click this button. Hi, I am from Bangalore, Karnataka. What are the prices of bhindi like? Should I hold it or sell it anytime soon?
+Bot: The price of bhindi in Bangalore today is around ₹3600 per quintal.  That's higher than usual for this time of year. However, prices are expected to drop to ₹3070 next week.  It's best to sell your bhindi soon to avoid further price decreases.
+User: Hey, what's up? How are you doing?
+Bot: I'm doing well, thank you for asking!  How can I help you today?
+User: Uh, I'm a farmer and I hope that you'll help me, right?
+Bot: Yes, I'm here to help you.  What farming questions or concerns do you have today?
+User: हाय मेरा नाम आदित्य है तुम मेरी मदद कर सकते हो?
+Bot: I understand Hindi, but I need more information to answer your question.  Please tell me what crop you're asking about and your location.  Knowing the type of crop and your location will allow me to provide you with relevant market price information and advice on whether to sell or hold your produce.
+User: Hello
+Bot: Hello!  To help you, I need to know what crop you're asking about and where you're located.  This will allow me to give you the best advice on selling or holding your produce.
+User: Hi, I'm from Bangalore, Karnataka. Do you think I should sell my bhindi produce or hold it in the next seven days?
+Bot: Bhindi prices in Bangalore are currently high (₹3600/quintal) but falling.  They're expected to drop to ₹3070/quintal in the next week.  It's best to sell your bhindi soon.
+User: Hi, can you please tell me what is the weather in Pilani, Rajasthan?
+Bot: The weather in Pilani is overcast and 30°C (feels like 32°C).  Humidity is low (28%), so water your crops more often.  The pressure is low, so expect some weather changes.  The weather is generally suitable for most crops.
+User: क्या तुम मुझे बता सकते हो पिलानी राजस्थान में वेदर कैसा है?
+Bot: The weather in Pilani, Rajasthan is currently overcast with a temperature of 30°C (feeling like 32°C).  Humidity is low at 28%.
+User: ಏನಾ ಒನ್ನ ಕೊಡ ಮನ್ನ ಕೊಡ
+Bot: I cannot answer your question because it is in Kannada.  I do not understand Kannada.  Please ask your question in English or Hindi.
+User: Hello
+Bot: Hello!
+User: Hello.
+Bot: Hello!
+User: Hi, I am from Bangalore, Karnataka. Uh, do you think I should hold my produce of bhindi or sell it?
+Bot: Hello!  Bhindi prices in Bangalore are currently 3600 Rs/Quintal, higher than the usual 2025 Rs/Quintal for this time of year. However, prices are falling and are expected to drop to 3052 Rs/Quintal in a week.  It's best to sell your bhindi now before the price goes down further.
+User: Hey, can you help me tell the weather in Pilani, Rajasthan?
+Bot: The weather in Pilani, Rajasthan is 30°C (feels like 32°C), partly cloudy with low humidity (29%).  It's a good temperature for most crops, but the low humidity means you should water more often.  The pressure is low, so expect some weather changes.
+User: ਓ ਤੁਸੀਂ ਮੁਜੇ ਬਤਾ ਸਕਦੇ ਹੋ ਮੇਰੇ ਸਭ ਤੋਂ ਪਾਸ ਐਫਪੀਓ ਕਹਾ ਪਰ ਹੈ ਔਰ ਕੌਣ ਸਾ ਹੈ?
+Bot: ਮੈਨੂੰ ਮਾਫ਼ ਕਰਨਾ, ਮੈਂ ਤੁਹਾਡੇ ਨੇੜੇ ਕਿਸੇ ਵੀ FPO ਦਾ ਪਤਾ ਨਹੀਂ ਲਗਾ ਸਕਿਆ।  ਮੈਂ ਇਸ ਬਾਰੇ ਹੋਰ ਜਾਣਕਾਰੀ ਇਕੱਠੀ ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕਰਾਂਗਾ।
+User: ਅ ਟੈਲ ਮੀ ਦਾ ਨੀਅਰੈਸਟ ਐਫ ਪੀ ਓ ਨਿਯਰ ਪੂਨੇ ਮਹਾਰਾਸ਼ਟਰ
+Bot: ਪੂਣੇ ਦੇ ਨੇੜੇ 5 ਐਫ਼ਪੀਓ ਹਨ:  ਬਰਾਮਤੀ ਵਿੱਚ 4 (ਬਰਾਮਤੀ ਐਗਰੋਸਟਾਰ ਕਿਸਾਨ, ਇੰਡਾਪੁਰ ਤਾਲੁਕਾ ਐਗਰੋ ਕਿਸਾਨ, ਡੌਂਡ ਕਿਸਾਨ, ਪੁਰੰਦਰ ਐਗਰੋਸਟਾਰ ਕਿਸਾਨ) ਅਤੇ ਮੁਲਸ਼ੀ ਵਿੱਚ 1 (ਵਿਅਕਤੀ ਵਿਕਾਸ ਕੇਂਦਰ, ਭਾਰਤ ਮੁਲਸ਼ੀ ਵਿਕਾਸ ਕਿਸਾਨ)।
+User: क्या तुम मुझे बता सकते हो पुणे महाराष्ट्र में सबसे पास वाला एफपीओ कौन सा है?
+Bot: पुणे के आसपास पाँच एफपीओ हैं: बारामती में एग्रीकल्चर डेवलपमेंट ट्रस्ट के चार (बारामती एग्रोस्टार किसान, इंदापुर तालुका एग्रो किसान, दौंड किसान, और पुरंदर एग्रोस्टार किसान), और मुल्शी में व्याक्ति विकास केंद्र (मुल्शी विकास किसान)।  ये सभी महाराष्ट्र में हैं।
+User: Hey, tell me about some crop insurance scheme.
+Bot: I'm sorry, I couldn't access information about crop insurance schemes at this time due to a technical issue with my resources.  To find information about crop insurance options in your area, I recommend checking with your local agricultural extension office or your state's department of agriculture.  They will have the most up-to-date and relevant information for your specific needs.
+User: क्या तुम मुझे कोई इंश्योरेंस स्कीम के बारे में बता सकते हो?
+Bot: मुझे माफ़ करना, लेकिन मुझे अभी आपके लिए कोई बीमा योजना नहीं मिल पाई है।  मैंने आपके लिए कुछ योजनाएँ ढूँढने की कोशिश की, लेकिन तकनीकी समस्या के कारण मुझे सफलता नहीं मिली।  कृपया किसी बीमा एजेंट से संपर्क करें या अपने क्षेत्र के सरकारी कार्यालयों में जानकारी प्राप्त करें। वे आपको किसानों के लिए उपलब्ध बीमा योजनाओं के बारे में बेहतर जानकारी दे सकते हैं।
+User: क्या तुम मुझे कोई इंश्योरेंस स्कीम के बजाय बता सकते हो?
+Bot: मुझे माफ़ करना, पर मैं अभी आपको कोई बीमा योजना नहीं बता सकता क्योंकि मेरा एक टूल काम नहीं कर रहा है।  मैं जल्द ही इस समस्या को ठीक करने की कोशिश करूँगा। तब तक, आप अपने क्षेत्र के किसी बीमा एजेंट से संपर्क कर सकते हैं या ऑनलाइन कुछ शोध कर सकते हैं।
+User: Can you tell me about some relevant fertilizer schemes in India?
+Bot: I'm sorry, but I couldn't find any specific information about fertilizer schemes in India using the available tools.  To help me find relevant information, could you please be more specific about what kind of fertilizer schemes you're interested in (e.g., schemes for a particular crop, region, or type of fertilizer)?  Alternatively, I can try searching for general agricultural schemes in India that might include fertilizer subsidies.
+User: Tell me about some insurance schemes for farmers in Rajasthan.
+Bot: I'm sorry, but I couldn't find any specific details about insurance schemes for farmers in Rajasthan using my available resources.  I tried searching using different terms, but unfortunately, I didn't get any results.  You might have better luck searching online using keywords like "Rajasthan farmer insurance schemes" or "PM Fasal Bima Yojana Rajasthan" (if that scheme applies to your region).  The Pradhan Mantri Fasal Bima Yojana (PMFBY) is a national scheme, so it's worth checking if it's available in Rajasthan.
