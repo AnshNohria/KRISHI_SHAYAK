@@ -1,4 +1,4 @@
-# 🌾 Krishi Dhan Sahayak - AI-Powered Agriculture Assistant
+# 🌾 Krishi Mitra - AI-Powered Agriculture Assistant
 
 A comprehensive, AI-driven agricultural assistant that helps Indian farmers with intelligent guidance, weather information, FPO connections, and government scheme access. Built with modern tool-based architecture for reliability and extensibility.
 
@@ -63,9 +63,9 @@ $env:GEMINI_API_KEY = "..."              # AI agent
    - Dual API architecture (Geoapify + Foursquare)
 
 4. **FPO Service** (`fpo/service.py`)
-   # Krishi Dhan Sahayak
+   # Krishi Mitra
 
-   🌾 **Krishi Dhan Sahayak** is an advanced, modular agricultural assistant for Indian farmers, FPOs, and agri-entrepreneurs. It combines state-of-the-art retrieval-augmented generation (RAG), real-time weather, market, and scheme search, and a multilingual voice interface powered by Sarvam.
+   🌾 **Krishi Mitra** is an advanced, modular agricultural assistant for Indian farmers, FPOs, and agri-entrepreneurs. It combines state-of-the-art retrieval-augmented generation (RAG), real-time weather, market, and scheme search, and a multilingual voice interface powered by Sarvam.
 
    ---
 
@@ -88,7 +88,7 @@ $env:GEMINI_API_KEY = "..."              # AI agent
    ## 🏗️ Project Structure
 
    ```
-   Krishi_Dhan_Sahayak/
+   Krishi_Mitra/
    ├── Advisory/
    │   ├── rag/                # RAG ingestion and retriever logic
    │   └── simple_chatbot.py   # RAG chatbot
@@ -117,7 +117,7 @@ $env:GEMINI_API_KEY = "..."              # AI agent
       - Add API keys for OpenWeatherMap, Visual Crossing, Geoapify, Gemini, etc.
    4. **Ingest PDFs for RAG**
       ```powershell
-      python ingest.py 2
+      python3 ingest.py
       ```
    5. **Run the orchestrator**
       ```powershell
