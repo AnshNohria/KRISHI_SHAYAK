@@ -13,6 +13,7 @@ click==8.2.1
 colorama==0.4.6
 fastapi==0.116.1
 filelock==3.12.2
+flask==2.3.3
 frozenlist==1.7.0
 fsspec==2025.5.0
 google-ai-generativelanguage==0.6.10
