@@ -1,1 +1,1 @@
-web: gunicorn Voice-Assistant-master\ copy.backend.main:app
+web: gunicorn Voice-Assistant-master-copy.backend.main:app
