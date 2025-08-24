@@ -1,1 +1,1 @@
-web: gunicorn Voice-Assistant-master-copy.backend.main:app
+web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker Voice-Assistant-master-copy.backend.main:app
