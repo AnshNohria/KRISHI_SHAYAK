@@ -51,7 +51,15 @@ debug.log
 *.sqlite3
 
 # ChromaDB and Vector Store
-chroma_db/
+# chroma_db/           <-- REMOVED
+# chroma/              <-- REMOVED
+# chromadb/            <-- REMOVED
+# chroma.db            <-- REMOVED
+# *.chroma.db          <-- REMOVED
+# .chroma/             <-- REMOVED
+# .chromadb/           <-- REMOVED
+# .chromadb.db         <-- REMOVED
+
 data/vector/
 data/**/icar_manifest.json
 

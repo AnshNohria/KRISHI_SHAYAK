@@ -6,12 +6,18 @@ from dataclasses import dataclass
 from pypdf import PdfReader
 import requests
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+
 try:
     import chromadb
     from chromadb.config import Settings
 except Exception:  # pragma: no cover - optional dependency path
     chromadb = None
     Settings = None
+
+# Always load .env from KRISHI_SHAYAK root, not local/backend
+KRISHI_SHAYAK_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(dotenv_path=KRISHI_SHAYAK_ROOT / '.env', override=True)
 
 # Make paths absolute from repo root (Advisory/rag -> Advisory -> repo)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

@@ -21,11 +21,11 @@ class SimpleKrishiBot:
     
     def __init__(self):
         # Auto-ingest kharif and rabi crops on bot startup
-        # try:
-        #     ingest_kharif_rabi()
-        #     print("✅ RAG crops ingested (kharif/rabi)")
-        # except Exception as e:
-        #     print(f"⚠️  RAG ingestion failed: {e}")
+        try:
+            ingest_kharif_rabi()
+            print("✅ RAG crops ingested (kharif/rabi)")
+        except Exception as e:
+            print(f"⚠️  RAG ingestion failed: {e}")
         self.setup_gemini()
         self.running = True
         

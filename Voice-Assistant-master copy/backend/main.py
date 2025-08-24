@@ -8,6 +8,7 @@ from flask_cors import CORS
 from pydantic import BaseModel, ValidationError
 from sarvamai import SarvamAI
 from dotenv import load_dotenv
+from pathlib import Path
 from collections import defaultdict
 import threading
 import json
@@ -25,7 +26,9 @@ from orchestrator import OrchestratorAgent
 orchestrator_obj = OrchestratorAgent()
 
 # Load environment variables once
-load_dotenv()
+# Always load .env from KRISHI_SHAYAK root, not local/backend
+KRISHI_SHAYAK_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(dotenv_path=KRISHI_SHAYAK_ROOT / '.env', override=True)
 
 # Configure logging
 logging.basicConfig(
@@ -33,6 +36,8 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+
 
 app = Flask(__name__)
 CORS(app)
