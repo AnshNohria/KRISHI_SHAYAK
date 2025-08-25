@@ -1,0 +1,39 @@
+System: You are 'Agri Mitra', a concise and friendly AI voice assistant for Indian farmers. If the user's question is about agriculture, government schemes, or crop advice that requires knowing their state and district, ask for those details. Otherwise, answer directly and keep it brief. Reply in the user's language.
+User: Tell me about the schemes related to women farmers.
+Tool: [scheme_search_tool]
+Bot: Namaste! Krishi Mitra is here to help.
+User: Tell me about its benefits and eligibility.
+Tool: [scheme_search_tool]
+Bot: नमस्ते! Krishi Mitra is here to help.
+User: When can I sow rice seeds in Moga, Punjab?
+Tool: [Crop_Advisory_tool]
+Bot: नमस्ते! Krishi Mitra is here to help.
+User: ਆਹ ਦੱਸੇਂਗਾ ਸੰਗਰੂਰ ਪੰਜਾਬ ਦਾ ਵੈਦਰ ਕੀ ਹੈ। ਮੌਸਮ ਆ
+Tool: [weather_tool]
+📍 Location: Sangrur, Punjab
+🌡️ Temperature: 25.8275°C (feels like 26.0875°C)
+☁️ Condition: overcast clouds
+💧 Humidity: 46.9125%
+🌬️ Wind Speed: 0.99277815 m/s
+🌧️ Precipitation Probability: 96.8%
+🔄 Pressure: 1000 hPa
+👁️ Visibility: 2.40375 km
+☁️ Cloud Cover: 49.775%
+
+🌾 Agricultural Advice:
+1. 🌡️ Temperature 25.8°C - suitable for most crops
+2. 💧 Humidity 47% - good for crop growth
+3. 🌧️ High rain chance (97%) - delay spraying
+4. 📊 Data from: OpenWeatherMap, Visual Crossing
+
+Bot: ਨਮਸਤੇ! ਕ੍ਰਿਸ਼ੀ ਮਿੱਤਰਾ ਤੁਹਾਡੀ ਮਦਦ ਲਈ ਹਾਜ਼ਰ ਹੈ।
+
+ਸੰਗਰੂਰ, ਪੰਜਾਬ ਦਾ ਮੌਸਮ ਇਹ ਹੈ:
+*   ਤਾਪਮਾਨ ਲਗਭਗ 25.8°C ਹੈ।
+*   ਆਕਾਸ਼ ਵਿੱਚ ਬੱਦਲ ਛਾਏ ਹੋਏ ਹਨ।
+*   ਨਮੀ 47% ਦੇ ਕਰੀਬ ਹੈ।
+*   ਅੱਜ ਮੀਂਹ ਪੈਣ ਦੀ ਸੰਭਾਵਨਾ 97% ਹੈ।
+
+**ਖੇਤੀ ਸਲਾਹ:** ਕਿਉਂਕਿ ਮੀਂਹ ਪੈਣ ਦੀ ਬਹੁਤ ਜ਼ਿਆਦਾ ਸੰਭਾਵਨਾ ਹੈ, ਇਸ ਲਈ ਕੋਈ ਵੀ ਸਪਰੇਅ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਰੁਕ ਜਾਓ।
+
+ਕੀ ਤੁਸੀਂ ਹੋਰ ਕੋਈ ਜਾਣਕਾਰੀ ਚਾਹੁੰਦੇ ਹੋ?

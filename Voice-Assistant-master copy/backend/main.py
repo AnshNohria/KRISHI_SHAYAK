@@ -86,6 +86,8 @@ def load_history(session_id):
                 history.append({"role": "assistant", "content": line[len("Bot: "):].strip()})
             elif line.startswith("System: "):
                 history.append({"role": "system", "content": line[len("System: "):].strip()})
+            elif line.startswith("Tool: "):
+                history.append({"role": "tool", "content": line[len("Tool: "):].strip()})
         return history
     return []
 
@@ -101,11 +103,36 @@ def save_history(session_id, history):
                 f.write(f"Bot: {msg['content']}\n")
             elif msg["role"] == "system":
                 f.write(f"System: {msg['content']}\n")
+            elif msg["role"] == "tool":
+                f.write(f"Tool: {msg['content']}\n")
 
 def get_user_language(history, header_language_code):
     # Only use header value, ignore detection
     return header_language_code or "hi-IN"
 
+def _format_tool_results(tool_results: dict) -> str:
+    """Create a concise, human-readable text from tool results dict.
+    Prefer 'result' fields when present; otherwise stringify values.
+    """
+    if not tool_results:
+        return ""
+    parts = []
+    for name, val in tool_results.items():
+        try:
+            if isinstance(val, dict):
+                # prefer common payload keys
+                if 'result' in val and isinstance(val['result'], str):
+                    txt = val['result']
+                elif 'message' in val and isinstance(val['message'], str):
+                    txt = val['message']
+                else:
+                    txt = json.dumps(val, ensure_ascii=False)[:1200]
+            else:
+                txt = str(val)
+            parts.append(f"[{name}]\n{txt}")
+        except Exception:
+            parts.append(f"[{name}] (unreadable)")
+    return "\n\n---\n\n".join(parts)
 
 @app.route("/voice-chat", methods=["POST"])
 def voice_chat():
@@ -186,6 +213,12 @@ def voice_chat():
                 logger.error("Gemini fallback failed: %s", e)
                 llm_text = "I heard you. Could you please repeat or clarify your farming question?"
 
+        # --- Compute tool output text and record in history (requested behavior) ---
+        tool_payload = getattr(orchestrator_obj, 'last_tool_results', {})
+        tool_text = _format_tool_results(tool_payload)
+        if tool_text:
+            history.append({"role": "tool", "content": tool_text, "tool_results": tool_payload})
+
         # --- Sanitize for TTS ---
         def sanitize_tts(text: str) -> str:
             if not text:
@@ -230,12 +263,17 @@ def voice_chat():
             return 'audio/wav'
         audio_mime = infer_mime(audio_base64)
 
+        # Keep assistant reply as the original LLM text (unchanged behavior)
         history.append({"role": "assistant", "content": llm_text})
         save_history(session_id, history)
 
         return jsonify({
             "transcription": user_text,
+            # Actual bot reply (LLM)
             "response": llm_text,
+            # Tool outputs available separately
+            "tool_results_text": tool_text,
+            "tool_results": tool_payload,
             "audio_base64": audio_base64,
             "audio_mime": audio_mime,
             "chat_history": history
