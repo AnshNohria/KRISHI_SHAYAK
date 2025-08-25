@@ -8,14 +8,14 @@ requests==2.32.5
 # AI and Language Models
 google-generativeai==0.8.5
 sentence-transformers==5.1.0
-transformers==4.55.2
-torch==2.3.1
+transformers==4.55.4
+torch==2.8.0
 
 # Data Processing and Analysis
-pandas==2.3.1
+pandas==2.3.2
 numpy==2.3.2
-beautifulsoup4==4.13.4
-lxml==6.0.0
+beautifulsoup4==4.13.5
+lxml==6.0.1
 html5lib==1.1
 unidecode==1.4.0
 # Vector Database and RAG
@@ -55,4 +55,4 @@ python-multipart
 groq
 sarvamai
 python-dotenv
-openpyxl==3.0.10
+openpyxl==3.1.5

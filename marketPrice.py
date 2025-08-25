@@ -22,7 +22,8 @@ RECENT_WINDOW_DAYS = 30  # how many recent days to collect for trend (from most 
 RECENT_MIN_POINTS = 3    # minimum points to consider a regression
 RECENT_PROJECTION_DAYS = 7
 
-HISTORICAL_CSV = "/Users/siddharthcs/Desktop/capone/KRISHI_SHAYAK/historical_prices.csv"  # ensure exists in working dir
+# Prefer env var; fall back to repo-relative path per README instructions
+HISTORICAL_CSV = os.getenv("HISTORICAL_CSV", ".\\data\\historical_prices.csv")
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
 
