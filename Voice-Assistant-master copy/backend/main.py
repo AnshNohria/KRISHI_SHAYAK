@@ -64,24 +64,36 @@ if not os.path.exists(CHAT_HISTORY_DIR):
     os.makedirs(CHAT_HISTORY_DIR)
 
 def load_history(session_id):
+    """Load prior chat as a simple line-based log using UTF-8.
+    Falls back to tolerant decoding if the file contains mixed encodings.
+    """
     path = os.path.join(CHAT_HISTORY_DIR, f"{session_id}.json")
     if os.path.exists(path):
         history = []
-        with open(path, "r") as f:
-            for line in f:
-                if line.startswith("User: "):
-                    history.append({"role": "user", "content": line[len("User: "):].strip()})
-                elif line.startswith("Bot: "):
-                    history.append({"role": "assistant", "content": line[len("Bot: "):].strip()})
-                elif line.startswith("System: "):
-                    history.append({"role": "system", "content": line[len("System: "):].strip()})
+        lines = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            # Fallback: replace undecodable bytes rather than failing the request
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+
+        for line in lines:
+            if line.startswith("User: "):
+                history.append({"role": "user", "content": line[len("User: "):].strip()})
+            elif line.startswith("Bot: "):
+                history.append({"role": "assistant", "content": line[len("Bot: "):].strip()})
+            elif line.startswith("System: "):
+                history.append({"role": "system", "content": line[len("System: "):].strip()})
         return history
     return []
 
 def save_history(session_id, history):
+    """Persist chat history in a human-readable format using UTF-8."""
     path = os.path.join(CHAT_HISTORY_DIR, f"{session_id}.json")
     # Save in human-readable format
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         for msg in history:
             if msg["role"] == "user":
                 f.write(f"User: {msg['content']}\n")

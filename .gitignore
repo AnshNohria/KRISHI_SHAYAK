@@ -24,12 +24,12 @@ share/python-wheels/
 .installed.cfg
 *.egg
 PIPFILE.lock
-
+.env
 # Virtual environments
 .venv
 env/
 venv/
-ENV/
+.env
 env.bak/
 venv.bak/
 

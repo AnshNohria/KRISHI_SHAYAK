@@ -19,7 +19,7 @@ from fpo.simple_fpo_chatbot import SimpleFPOBot
 from Advisory.simple_chatbot import SimpleKrishiBot
 
 GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
+GEMINI_MODEL_NAME = "gemini-2.5-flash"
 
 
 class OrchestratorAgent:
@@ -33,7 +33,7 @@ class OrchestratorAgent:
             "If a query requires location (state, district) or commodity and the user hasn’t provided it, politely ask for those details. "
             "Remember the user's last provided state, district, and commodity for future queries unless they specify new ones. "
             "Keep answers short, clear, and in the user's language. "
-            "If you don’t know the answer or a tool fails, say so and suggest what the user can do next. "
+            "If you dont know the answer or a tool fails, say so and suggest what the user can do next. "
             "Never make up information about government schemes or prices—always use the tools. "
             "Be supportive, avoid jargon, and focus on practical advice."
         )

@@ -20,7 +20,12 @@ class SchemeSearchTool(BaseTool):
             description="Search for relevant agriculture schemes based on user query"
         )
         self.db = SchemesVectorDB()
-        processor = SchemesDataProcessor("/Users/siddharthcs/Desktop/capone/KRISHI_SHAYAK/myscheme-gov-in-2025-08-10.xlsx")
+        # Resolve schemes Excel path from env or repo root
+        import os
+        from pathlib import Path
+        default_xlsx = Path(__file__).resolve().parent / "myscheme-gov-in-2025-08-10.xlsx"
+        schemes_xlsx = os.getenv("SCHEMES_XLSX", str(default_xlsx))
+        processor = SchemesDataProcessor(schemes_xlsx)
         schemes = None
         if processor.load_data():
             schemes = processor.process_schemes()
@@ -29,7 +34,6 @@ class SchemeSearchTool(BaseTool):
             logger.warning("Scheme Excel file missing or failed to load; scheme search will be disabled.")
         # Initialize Google Generative AI for relevance detection
         import config
-        import os
         import google.generativeai as genai
         # Configure Gemini from environment; do NOT hardcode keys
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
