@@ -1,39 +1,27 @@
 System: You are 'Agri Mitra', a concise and friendly AI voice assistant for Indian farmers. If the user's question is about agriculture, government schemes, or crop advice that requires knowing their state and district, ask for those details. Otherwise, answer directly and keep it brief. Reply in the user's language.
-User: Tell me about the schemes related to women farmers.
-Tool: [scheme_search_tool]
-Bot: Namaste! Krishi Mitra is here to help.
-User: Tell me about its benefits and eligibility.
-Tool: [scheme_search_tool]
-Bot: नमस्ते! Krishi Mitra is here to help.
-User: When can I sow rice seeds in Moga, Punjab?
-Tool: [Crop_Advisory_tool]
-Bot: नमस्ते! Krishi Mitra is here to help.
-User: ਆਹ ਦੱਸੇਂਗਾ ਸੰਗਰੂਰ ਪੰਜਾਬ ਦਾ ਵੈਦਰ ਕੀ ਹੈ। ਮੌਸਮ ਆ
-Tool: [weather_tool]
-📍 Location: Sangrur, Punjab
-🌡️ Temperature: 25.8275°C (feels like 26.0875°C)
-☁️ Condition: overcast clouds
-💧 Humidity: 46.9125%
-🌬️ Wind Speed: 0.99277815 m/s
-🌧️ Precipitation Probability: 96.8%
-🔄 Pressure: 1000 hPa
-👁️ Visibility: 2.40375 km
-☁️ Cloud Cover: 49.775%
+User: Can you tell me the price of rice in Ludhiana, Punjab and whether should I sell it or not?
+Tool: [current_price_tool]
+I couldn't find recent market price data for Rice in Ludhiana, Punjab in the last 30 days. Please try another district/nearby market or a different crop.
 
-🌾 Agricultural Advice:
-1. 🌡️ Temperature 25.8°C - suitable for most crops
-2. 💧 Humidity 47% - good for crop growth
-3. 🌧️ High rain chance (97%) - delay spraying
-4. 📊 Data from: OpenWeatherMap, Visual Crossing
+---
 
-Bot: ਨਮਸਤੇ! ਕ੍ਰਿਸ਼ੀ ਮਿੱਤਰਾ ਤੁਹਾਡੀ ਮਦਦ ਲਈ ਹਾਜ਼ਰ ਹੈ।
+[price_predict_tool]
+Hello!  We don't have a precise current rice price for Ludhiana today.  However, the usual price for this time of year is around 2778 Rs/Quintal.  For the next 7 days, we expect the price to stay around 2778 Rs/Quintal.  Since the price is stable, you can sell your rice now or wait a little – it shouldn't make a big difference in price.
 
-ਸੰਗਰੂਰ, ਪੰਜਾਬ ਦਾ ਮੌਸਮ ਇਹ ਹੈ:
-*   ਤਾਪਮਾਨ ਲਗਭਗ 25.8°C ਹੈ।
-*   ਆਕਾਸ਼ ਵਿੱਚ ਬੱਦਲ ਛਾਏ ਹੋਏ ਹਨ।
-*   ਨਮੀ 47% ਦੇ ਕਰੀਬ ਹੈ।
-*   ਅੱਜ ਮੀਂਹ ਪੈਣ ਦੀ ਸੰਭਾਵਨਾ 97% ਹੈ।
+---
 
-**ਖੇਤੀ ਸਲਾਹ:** ਕਿਉਂਕਿ ਮੀਂਹ ਪੈਣ ਦੀ ਬਹੁਤ ਜ਼ਿਆਦਾ ਸੰਭਾਵਨਾ ਹੈ, ਇਸ ਲਈ ਕੋਈ ਵੀ ਸਪਰੇਅ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਰੁਕ ਜਾਓ।
+[weather_forecast]
+📍 Location: Ludhiana, Punjab
+📅 5-Day Weather Forecast:
+2025-08-26: Rain, Overcast, Temp: 77.6°C (min 73.3°C, max 84.5°C), Precip: 1.071mm (100.0%), Humidity: 92.5%, Wind: 18.8 km/h
+2025-08-27: Rain, Overcast, Temp: 81.1°C (min 75.5°C, max 87.3°C), Precip: 0.527mm (90.3%), Humidity: 86.7%, Wind: 10.3 km/h
+2025-08-28: Rain, Partially cloudy, Temp: 82.8°C (min 76.6°C, max 90.2°C), Precip: 0.146mm (67.7%), Humidity: 83.7%, Wind: 10.3 km/h
+2025-08-29: Rain, Temp: 82.5°C (min 76.9°C, max 90.8°C), Precip: 0.174mm (71.0%), Humidity: 83.9%, Wind: 10.3 km/h
+2025-08-30: Rain, Partially cloudy, Temp: 80.3°C (min 75.5°C, max 87.2°C), Precip: 0.543mm (90.3%), Humidity: 87.3%, Wind: 14.8 km/h
 
-ਕੀ ਤੁਸੀਂ ਹੋਰ ਕੋਈ ਜਾਣਕਾਰੀ ਚਾਹੁੰਦੇ ਹੋ?
+Bot: Namaste! Krishi Mitra here.
+
+For rice in Ludhiana, Punjab:
+While we couldn't find very recent market data, the predicted price is stable at around **₹2778 per Quintal** for the next 7 days.
+
+However, the weather forecast for the next 5 days shows **rain and overcast conditions** with high chances of precipitation. Considering this, it would be practical to **consider selling your rice sooner** to avoid any issues with storage, quality, or transportation due to the rain.

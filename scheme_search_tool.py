@@ -25,11 +25,21 @@ class SchemeSearchTool(BaseTool):
         from pathlib import Path
         default_xlsx = Path(__file__).resolve().parent / "myscheme-gov-in-2025-08-10.xlsx"
         schemes_xlsx = os.getenv("SCHEMES_XLSX", str(default_xlsx))
+        self._auto_ingest = (os.getenv("SCHEMES_AUTO_INGEST", "true").lower() == "true")
+        self._ingested = False
+        self._schemes_data = None
         processor = SchemesDataProcessor(schemes_xlsx)
-        schemes = None
         if processor.load_data():
-            schemes = processor.process_schemes()
-            self.db.add_schemes(schemes)
+            self._schemes_data = processor.process_schemes()
+            # Defer ingestion to avoid heavy startup; allow opt-in via env
+            if self._auto_ingest:
+                try:
+                    self.db.add_schemes(self._schemes_data)
+                    self._ingested = True
+                    logger.info("Schemes ingested at startup (SCHEMES_AUTO_INGEST=true)")
+                except Exception as e:
+                    logger.warning(f"Deferred scheme ingestion due to error: {e}")
+                    self._ingested = False
         else:
             logger.warning("Scheme Excel file missing or failed to load; scheme search will be disabled.")
         # Initialize Google Generative AI for relevance detection
@@ -125,6 +135,14 @@ Considering the context, does this query need agriculture scheme database search
     def execute(self, query: str, **kwargs) -> Dict[str, Any]:
         """Execute the scheme search"""
         try:
+            # Lazy ingest if not yet ingested
+            if not self._ingested and self._schemes_data:
+                try:
+                    self.db.add_schemes(self._schemes_data)
+                    self._ingested = True
+                    logger.info("Schemes ingested lazily on first use")
+                except Exception as e:
+                    logger.warning(f"Lazy ingestion failed: {e}")
             max_results = kwargs.get('max_results', 3)
             filters = kwargs.get('filters', {})
             

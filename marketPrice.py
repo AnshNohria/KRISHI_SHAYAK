@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -22,8 +23,8 @@ RECENT_WINDOW_DAYS = 30  # how many recent days to collect for trend (from most 
 RECENT_MIN_POINTS = 3    # minimum points to consider a regression
 RECENT_PROJECTION_DAYS = 7
 
-# Prefer env var; fall back to repo-relative path per README instructions
-HISTORICAL_CSV = os.getenv("HISTORICAL_CSV", ".\\data\\historical_prices.csv")
+# Prefer env var; else use the file in the Krishi Shayak folder (repo root)
+HISTORICAL_CSV = os.getenv("HISTORICAL_CSV") or str((Path(__file__).resolve().parent / "historical_prices.csv"))
 
 GEMINI_MODEL_NAME = "gemini-1.5-flash"
 
@@ -361,11 +362,11 @@ def predict_from_history(commodity: str, csv_path=HISTORICAL_CSV, window_days=15
         diff = min((doy - today_doy) % 365, (today_doy - doy) % 365)
         return diff <= window
 
-    df_season = df_comp[df_comp["__doy"].apply(within_window)]
+    df_season = df_comp[df_comp["__doy"].apply(within_window)].copy()
     if df_season.empty:
         return None, "No seasonal historical records in the ±{} day window.".format(window)
 
-    df_season["modal_f"] = df_season[col_modal].apply(to_float_safe)
+    df_season.loc[:, "modal_f"] = df_season[col_modal].apply(to_float_safe)
     df_season = df_season.dropna(subset=["modal_f"])
     if df_season.empty:
         return None, "Seasonal records exist but modal_price values are unusable."
@@ -694,11 +695,19 @@ Now extract from this input and output ONLY JSON:
     print(mapping)
     recent_date, recent_records = find_most_recent_data_date(crop, state, district, LOOKBACK_DAYS)
     print("RECENT RECORDS\n", recent_date, "\n" ,recent_records)
+    if not recent_records:
+        return (
+            f"I couldn't find recent market price data for {crop} in {district}, {state} in the last {LOOKBACK_DAYS} days. "
+            "Please try another district/nearby market or a different crop."
+        )
     total = 0
     c = 0
     for r in recent_records:
-        total += float(r["Modal_Price"])
-        c += 1
+        try:
+            total += float(r.get("Modal_Price") or r.get("modal_price") or 0)
+            c += 1
+        except Exception:
+            continue
     mean_price = total / c if c > 0 else 0
     FINAL_PROMPT = f"""
     You are an agricultural assistant. 

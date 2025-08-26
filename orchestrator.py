@@ -136,12 +136,24 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
 
     def call_tools(self, query: str, tools_needed: List[str]) -> Dict[str, Any]:
         results: Dict[str, Any] = {}
-        for name in tools_needed:
+        # De-duplicate and avoid heavy double calls: if both price tools chosen, skip current_price_tool
+        ordered_unique = []
+        for t in tools_needed:
+            if t not in ordered_unique:
+                ordered_unique.append(t)
+        skip_current_price = ("current_price_tool" in ordered_unique and "price_predict_tool" in ordered_unique)
+        for name in ordered_unique:
             entry = self.tools.get(name)
             if not entry:
                 continue
             inst = entry["instance"]
             try:
+                if skip_current_price and name == "current_price_tool":
+                    results[name] = (
+                        "Skipped duplicate API call to avoid double price fetch; "
+                        "using price_predict_tool output for pricing and advice."
+                    )
+                    continue
                 if name == "scheme_search_tool":
                     # Use the tool's execute method for scheme search
                     results[name] = inst.execute(query, conversation_history=self.conversation_history)
@@ -158,6 +170,18 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
                     results[name] = inst(aug)
             except Exception as e:
                 results[name] = f"Tool {name} failed: {e}"
+        # Always enrich price queries with a 5-day weather forecast to adjust advice
+        try:
+            if any(t in tools_needed for t in ("price_predict_tool", "current_price_tool")):
+                weather_entry = self.tools.get("weather_tool")
+                if weather_entry:
+                    weather_bot = weather_entry["instance"]
+                    weather_query = self.resolve_query_with_history(query, "weather_tool") + " forecast next 5 days"
+                    # Force forecast mode for 5-day outlook
+                    forecast_text = weather_bot.get_weather_response(weather_query, self.conversation_history, forecast=True)
+                    results["weather_forecast"] = forecast_text
+        except Exception as e:
+            results["weather_forecast"] = f"Weather forecast failed: {e}"
         return results
 
     def final_response(self, query: str, tool_results: Dict[str, Any]) -> str:
@@ -169,6 +193,11 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
     Tool results JSON: {json.dumps(tool_results, indent=2)}
 
     Write a short, clear answer for a farmer in simple language combining the results.
+    If price tools are present and a 5-day weather forecast is available (see key 'weather_forecast'), ADJUST the sell/hold advice using this guidance:
+    - If most of the next 5 days show heavy rain or high precipitation chances, prefer advising to sell sooner to avoid spoilage/logistics issues.
+    - If the forecast is dry/clear and prices are rising, holding may be better.
+    - If forecast is mixed, explain briefly and give a practical recommendation.
+    Keep it practical and supportive; mention both price outlook and weather impact.
     If any tool failed, briefly mention it helpfully.
     """
         return self._llm(prompt)

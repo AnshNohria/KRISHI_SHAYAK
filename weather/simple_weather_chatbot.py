@@ -14,31 +14,6 @@ load_dotenv()
 
 import google.generativeai as genai
 from weather.service import get_weather, get_weather_forecast, generate_agricultural_advice
-def get_forecast_response(self, query: str, conversation_history: List[Dict] = None, days: int = 5) -> str:
-        """Get a multi-day weather forecast with AI-optimized location extraction"""
-        try:
-            location_data = self.optimize_and_extract_location(query, conversation_history)
-            village = location_data['village']
-            state = location_data['state']
-
-            async def get_forecast_data():
-                return await get_weather_forecast(village, state, days=days)
-
-            forecast_data = asyncio.run(get_forecast_data())
-            if not forecast_data:
-                return "❌ Error retrieving weather forecast."
-
-            result = f"📍 Location: {forecast_data['location']}\n"
-            result += f"📅 5-Day Weather Forecast:\n"
-            for day in forecast_data['forecast']:
-                result += (f"{day['date']}: {day['description']}, "
-                           f"Temp: {day['temp']}°C (min {day['tempmin']}°C, max {day['tempmax']}°C), "
-                           f"Precip: {day['precip']}mm ({day['precipprob']}%), "
-                           f"Humidity: {day['humidity']}%, "
-                           f"Wind: {day['windspeed']} km/h\n")
-            return result
-        except Exception as e:
-            return f"❌ Error retrieving weather forecast: {e}"
 
 class SimpleWeatherBot:
     """Simple weather chatbot with AI optimization and conversation history - processes single input with history"""
@@ -180,6 +155,31 @@ Examples:
         
         return {'village': village, 'state': state}
 
+    def get_forecast_response(self, query: str, conversation_history: List[Dict] = None, days: int = 5) -> str:
+        """Get a multi-day weather forecast with AI-optimized location extraction"""
+        try:
+            location_data = self.optimize_and_extract_location(query, conversation_history)
+            village = location_data['village']
+            state = location_data['state']
+
+            async def get_forecast_data():
+                return await get_weather_forecast(village, state, days=days)
+
+            forecast_data = asyncio.run(get_forecast_data())
+            if not forecast_data:
+                return "❌ Error retrieving weather forecast."
+
+            result = f"📍 Location: {forecast_data['location']}\n"
+            result += f"📅 5-Day Weather Forecast:\n"
+            for day in forecast_data['forecast']:
+                result += (f"{day['date']}: {day['description']}, "
+                           f"Temp: {day['temp']}°C (min {day['tempmin']}°C, max {day['tempmax']}°C), "
+                           f"Precip: {day['precip']}mm ({day['precipprob']}%), "
+                           f"Humidity: {day['humidity']}%, "
+                           f"Wind: {day['windspeed']} km/h\n")
+            return result
+        except Exception as e:
+            return f"❌ Error retrieving weather forecast: {e}"
     def get_weather_response(self, query: str, conversation_history: List[Dict] = None, forecast: bool = False) -> str:
         """Get direct weather or forecast information with AI-optimized location extraction"""
         if forecast:
