@@ -56,6 +56,83 @@ class WeatherData:
         self.cloud_cover = cloud_cover
         self.data_sources = data_sources or []
 
+# New: Data class for a single day's forecast
+class WeatherForecastDay:
+    def __init__(self, date: str, temp: float, tempmin: float, tempmax: float, description: str, precip: float, precipprob: float, humidity: float, windspeed: float, winddir: float):
+        self.date = date
+        self.temp = temp
+        self.tempmin = tempmin
+        self.tempmax = tempmax
+        self.description = description
+        self.precip = precip
+        self.precipprob = precipprob
+        self.humidity = humidity
+        self.windspeed = windspeed
+        self.winddir = winddir
+
+    def as_dict(self):
+        return {
+            "date": self.date,
+            "temp": self.temp,
+            "tempmin": self.tempmin,
+            "tempmax": self.tempmax,
+            "description": self.description,
+            "precip": self.precip,
+            "precipprob": self.precipprob,
+            "humidity": self.humidity,
+            "windspeed": self.windspeed,
+            "winddir": self.winddir
+        }
+async def get_weather_forecast(village: str, state: str, days: int = 5) -> Optional[Dict[str, Any]]:
+    """Get a multi-day weather forecast (default 5 days) using Visual Crossing."""
+    if not VISUAL_CROSSING_API_KEY:
+        raise WeatherServiceError("Visual Crossing API key not configured")
+
+    # Geocode location
+    location = await geocode_visual_crossing(village, state)
+    if not location:
+        raise WeatherServiceError(f"Could not find location: {village}, {state}")
+    lat, lon = location["lat"], location["lon"]
+    location_name = f"{location['name']}, {location['state']}"
+
+    location_str = f"{lat},{lon}"
+    params = {
+        "key": VISUAL_CROSSING_API_KEY,
+        "contentType": "json",
+        "include": "days",
+        "elements": "datetime,temp,tempmin,tempmax,humidity,precip,precipprob,windspeed,winddir,description,conditions"
+    }
+    url = f"{VISUAL_CROSSING_URL}/{location_str}"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+        days_data = data.get("days", [])[:days]
+        forecast = []
+        for d in days_data:
+            forecast.append(WeatherForecastDay(
+                date=d.get("datetime"),
+                temp=d.get("temp"),
+                tempmin=d.get("tempmin"),
+                tempmax=d.get("tempmax"),
+                description=d.get("conditions", ""),
+                precip=d.get("precip", 0),
+                precipprob=d.get("precipprob", 0),
+                humidity=d.get("humidity", 0),
+                windspeed=d.get("windspeed", 0),
+                winddir=d.get("winddir", 0)
+            ))
+        return {
+            "location": location_name,
+            "lat": lat,
+            "lon": lon,
+            "forecast": [f.as_dict() for f in forecast]
+        }
+    except Exception as e:
+        logger.warning(f"Visual Crossing 5-day forecast failed: {e}")
+        return None
+
 async def geocode_openweather(village: str, state: str) -> Optional[Dict[str, Any]]:
     """Geocode using OpenWeatherMap."""
     if not OPENWEATHER_API_KEY:

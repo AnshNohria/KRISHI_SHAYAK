@@ -13,7 +13,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import google.generativeai as genai
-from weather.service import get_weather, generate_agricultural_advice
+from weather.service import get_weather, get_weather_forecast, generate_agricultural_advice
+def get_forecast_response(self, query: str, conversation_history: List[Dict] = None, days: int = 5) -> str:
+        """Get a multi-day weather forecast with AI-optimized location extraction"""
+        try:
+            location_data = self.optimize_and_extract_location(query, conversation_history)
+            village = location_data['village']
+            state = location_data['state']
+
+            async def get_forecast_data():
+                return await get_weather_forecast(village, state, days=days)
+
+            forecast_data = asyncio.run(get_forecast_data())
+            if not forecast_data:
+                return "❌ Error retrieving weather forecast."
+
+            result = f"📍 Location: {forecast_data['location']}\n"
+            result += f"📅 5-Day Weather Forecast:\n"
+            for day in forecast_data['forecast']:
+                result += (f"{day['date']}: {day['description']}, "
+                           f"Temp: {day['temp']}°C (min {day['tempmin']}°C, max {day['tempmax']}°C), "
+                           f"Precip: {day['precip']}mm ({day['precipprob']}%), "
+                           f"Humidity: {day['humidity']}%, "
+                           f"Wind: {day['windspeed']} km/h\n")
+            return result
+        except Exception as e:
+            return f"❌ Error retrieving weather forecast: {e}"
 
 class SimpleWeatherBot:
     """Simple weather chatbot with AI optimization and conversation history - processes single input with history"""
@@ -155,8 +180,10 @@ Examples:
         
         return {'village': village, 'state': state}
 
-    def get_weather_response(self, query: str, conversation_history: List[Dict] = None) -> str:
-        """Get direct weather information with AI-optimized location extraction"""
+    def get_weather_response(self, query: str, conversation_history: List[Dict] = None, forecast: bool = False) -> str:
+        """Get direct weather or forecast information with AI-optimized location extraction"""
+        if forecast:
+            return self.get_forecast_response(query, conversation_history, days=5)
         try:
             # Single AI call to extract village and state
             location_data = self.optimize_and_extract_location(query, conversation_history)
@@ -204,7 +231,7 @@ Examples:
             return f"❌ Error retrieving weather information: {e}"
 
     def process_input(self, input_string: str) -> str:
-        """Process input string containing history and query, return weather results"""
+        """Process input string containing history and query, return weather or forecast results"""
         print("🔍 Extracting location using AI optimization...")
         
         # Parse input to get history and current query
@@ -212,9 +239,12 @@ Examples:
         
         if conversation_history:
             print(f"📚 Using {len(conversation_history)} previous exchanges for context")
-        
-        # Get weather response with context (single AI call for location extraction)
-        return self.get_weather_response(current_query, conversation_history)
+
+        # If the query contains 'forecast', return 5-day forecast, else current weather
+        if 'forecast' in current_query.lower() or 'next 5 days' in current_query.lower() or '5-day' in current_query.lower():
+            return self.get_weather_response(current_query, conversation_history, forecast=True)
+        else:
+            return self.get_weather_response(current_query, conversation_history, forecast=False)
 
     def process_query(self, query: str) -> str:
         """Legacy method for backward compatibility"""
