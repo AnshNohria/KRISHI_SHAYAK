@@ -6,7 +6,7 @@ It also adds defensive handling to avoid empty LLM responses (important for
 the voice assistant flow where TTS expects non-empty text).
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import re
 import os
@@ -68,12 +68,54 @@ class OrchestratorAgent:
                 "instance": SimpleKrishiBot(),
             },
         }
-        self.conversation_history: List[Dict[str, str]] = []
-        self.last_tool_results: Dict[str, Any] = {}
+        self.conversation_history = []
+        self.last_tool_results = {}
+        self.reply_language_code = None
+
+    def set_reply_language(self, language_code: Optional[str]):
+        """Set the target language code for replies, e.g., 'en-IN', 'hi-IN'."""
+        self.reply_language_code = language_code
+
+    def _language_directive(self) -> str:
+        """Return a strong instruction to always reply in the chosen language and avoid JSON/code blocks."""
+        code = (self.reply_language_code or "en-IN").strip()
+        lang_map = {
+            "hi-IN": "Hindi",
+            "en-IN": "English",
+            "pa-IN": "Punjabi",
+            "bn-IN": "Bengali",
+            "gu-IN": "Gujarati",
+            "kn-IN": "Kannada",
+            "ml-IN": "Malayalam",
+            "mr-IN": "Marathi",
+            "od-IN": "Odia",
+            "ta-IN": "Tamil",
+            "te-IN": "Telugu",
+        }
+        lang = lang_map.get(code, "English")
+        return (
+            f"Always reply ONLY in {lang}. "
+            "Do not include JSON, code blocks, or key:value lists—use plain, short sentences."
+        )
 
     # ------------------------------------------------------------------
     # Low-level LLM helpers
     # ------------------------------------------------------------------
+    def _to_english(self, text: str) -> str:
+        """Translate arbitrary text to English using the LLM; return best-effort original on failure."""
+        try:
+            if not text:
+                return text
+            prompt = (
+                "Translate the following text to English. "
+                "Return ONLY the translation, with no quotes, notes, or extra words.\n\n"
+                f"Text:\n{text}"
+            )
+            translated = generate_text(prompt, model_name=GEMINI_MODEL_NAME, retries=1) or ""
+            translated = translated.strip()
+            return translated or text
+        except Exception:
+            return text
     def _extract_text(self, resp) -> str:
         if resp is None:
             return ""
@@ -96,7 +138,7 @@ class OrchestratorAgent:
         return ""
 
     def _llm(self, prompt: str) -> str:
-        full_prompt = f"{self.system_prompt}\n\n{prompt}"
+        full_prompt = f"{self._language_directive()}\n\n{self.system_prompt}\n\n{prompt}"
         txt = generate_text(full_prompt, model_name=GEMINI_MODEL_NAME, retries=2)
         if not txt:
             return (
@@ -125,17 +167,27 @@ class OrchestratorAgent:
 
     def resolve_query_with_history(self, query: str, tool_name: str) -> str:
         tool_desc = self.tools[tool_name]["description"]
+        # Always produce an English, single-line query for tools
         prompt = f"""
+You help construct a single-line tool query in English.
 Augment the user query with any missing (commodity, district, state) gleaned from history.
 History: {json.dumps(self.conversation_history)}
 Tool: {tool_name} - {tool_desc}
 Original: {query}
-Output a SINGLE natural language query (no JSON) that the tool can understand.
+
+Return ONLY a single English sentence suitable for the tool. No JSON, no bullets.
 """
-        return self._llm(prompt).strip()
+        text = generate_text(prompt, model_name=GEMINI_MODEL_NAME, retries=1) or ""
+        text = text.strip()
+        if not text:
+            # Fallback: translate the original query to English
+            return self._to_english(query)
+        return text
 
     def call_tools(self, query: str, tools_needed: List[str]) -> Dict[str, Any]:
         results: Dict[str, Any] = {}
+        # Ensure the primary query for tools is English
+        english_query = self._to_english(query)
         # De-duplicate and avoid heavy double calls: if both price tools chosen, skip current_price_tool
         ordered_unique = []
         for t in tools_needed:
@@ -156,17 +208,17 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
                     continue
                 if name == "scheme_search_tool":
                     # Use the tool's execute method for scheme search
-                    results[name] = inst.execute(query, conversation_history=self.conversation_history)
+                    results[name] = inst.execute(english_query, conversation_history=self.conversation_history)
                 elif name == "map_search_tool":
-                    results[name] = inst.get_maps_response(query, self.conversation_history)
+                    results[name] = inst.get_maps_response(english_query, self.conversation_history)
                 elif name == "weather_tool":
-                    results[name] = inst.get_weather_response(query, self.conversation_history)
+                    results[name] = inst.get_weather_response(english_query, self.conversation_history)
                 elif name == "fpo_tool":
-                    results[name] = inst.get_fpo_response(query, self.conversation_history)
+                    results[name] = inst.get_fpo_response(english_query, self.conversation_history)
                 elif name == "Crop_Advisory_tool":
-                    results[name] = inst.get_rag_response(query, self.conversation_history)
+                    results[name] = inst.get_rag_response(english_query, self.conversation_history)
                 else:  # price tools
-                    aug = self.resolve_query_with_history(query, name)
+                    aug = self.resolve_query_with_history(english_query, name)
                     results[name] = inst(aug)
             except Exception as e:
                 results[name] = f"Tool {name} failed: {e}"
@@ -176,7 +228,7 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
                 weather_entry = self.tools.get("weather_tool")
                 if weather_entry:
                     weather_bot = weather_entry["instance"]
-                    weather_query = self.resolve_query_with_history(query, "weather_tool") + " forecast next 5 days"
+                    weather_query = self.resolve_query_with_history(english_query, "weather_tool") + " forecast next 5 days"
                     # Force forecast mode for 5-day outlook
                     forecast_text = weather_bot.get_weather_response(weather_query, self.conversation_history, forecast=True)
                     results["weather_forecast"] = forecast_text
@@ -193,6 +245,7 @@ Output a SINGLE natural language query (no JSON) that the tool can understand.
     Tool results JSON: {json.dumps(tool_results, indent=2)}
 
     Write a short, clear answer for a farmer in simple language combining the results.
+    Do NOT output JSON or lists of key-value pairs; write natural sentences only.
     If price tools are present and a 5-day weather forecast is available (see key 'weather_forecast'), ADJUST the sell/hold advice using this guidance:
     - If most of the next 5 days show heavy rain or high precipitation chances, prefer advising to sell sooner to avoid spoilage/logistics issues.
     - If the forecast is dry/clear and prices are rising, holding may be better.

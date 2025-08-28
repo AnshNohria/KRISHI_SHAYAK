@@ -77,7 +77,7 @@ Examples:
 - "rice pest problem" → "rice pest control disease management insect paddy crop protection"
 - "organic farming" → "organic farming practices sustainable agriculture natural methods chemical-free cultivation"
 
-Respond with ONLY the optimized terms (no quotes, no extra text)."""
+Respond with ONLY the optimized terms (no quotes, no extra text) """
 
             response = self.model.generate_content(prompt)
             optimized = (response.text or "").strip()

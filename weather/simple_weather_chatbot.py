@@ -92,7 +92,7 @@ Instructions:
 5. Consider agricultural context if relevant
 6. If state is not clear, use the most likely state for the village
 7. Use LATEST information from query but consider context from history
-
+8. Give response to tool in english
 Respond ONLY in this exact JSON format:
 {{
     "village": "extracted village/city name",

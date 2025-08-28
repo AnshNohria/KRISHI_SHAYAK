@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from collections import defaultdict
 import threading
 import json
+import re
 from groq.types.chat import ChatCompletionUserMessageParam
 import google.generativeai as genai
 import sys
@@ -151,7 +152,7 @@ def voice_chat():
             history.append({"role": "system", "content": (
                 "You are 'Agri Mitra', a concise and friendly AI voice assistant for Indian farmers. "
                 "If the user's question is about agriculture, government schemes, or crop advice that requires knowing their state and district, ask for those details. "
-                "Otherwise, answer directly and keep it brief. Reply in the user's language."
+                "Otherwise, answer directly and keep it brief."
             )})
 
         # --- Persist inbound audio ---
@@ -201,6 +202,9 @@ def voice_chat():
         # --- LLM Response (primary orchestrator; fallback to raw Gemini) ---
         llm_text = None
         try:
+            # Ensure orchestrator uses the selected reply language
+            if hasattr(orchestrator_obj, 'set_reply_language'):
+                orchestrator_obj.set_reply_language(user_language_code)
             llm_text = orchestrator_obj.handle_query(user_text)
         except Exception as e:
             logger.warning("Orchestrator failed, will fallback to Gemini: %s", e)
@@ -212,6 +216,18 @@ def voice_chat():
             except Exception as e:
                 logger.error("Gemini fallback failed: %s", e)
                 llm_text = "I heard you. Could you please repeat or clarify your farming question?"
+
+        # --- Sanitize possible JSON/code block leakage ---
+        def sanitize_reply(text: str) -> str:
+            if not isinstance(text, str):
+                return str(text)
+            # remove fenced code blocks
+            text = re.sub(r"```[\s\S]*?```", "", text).strip()
+            # if it looks like pure JSON, replace with a friendly summary lead
+            if re.match(r"^\s*[\[{]", text) and re.search(r"[\]}]\s*$", text):
+                return "Here is a quick summary based on the latest data."
+            return text
+        llm_text = sanitize_reply(llm_text)
 
         # --- Compute tool output text and record in history (requested behavior) ---
         tool_payload = getattr(orchestrator_obj, 'last_tool_results', {})
